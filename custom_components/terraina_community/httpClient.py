@@ -90,6 +90,13 @@ class TerrainaHttpClient:
         payload_b64 = self._message_builder.build_change_status_message_payload(sn, status)
         await self._send_message(config_entry, sn, payload_b64)
 
+    async def set_work_mode(
+        self, config_entry: ConfigEntry, sn: str, manual_mode_type: int
+    ) -> None:
+        """Send a setWorkMode command (0=auto, 1=manual)."""
+        payload_b64 = self._message_builder.build_change_working_mode_payload(sn, manual_mode_type)
+        await self._send_message(config_entry, sn, payload_b64)
+
     async def go_home(self, config_entry: ConfigEntry, serial_number: str) -> None:
         """Send the mower back to its charging station (backing = index 4)."""
         from .const import WORKING_STATUS

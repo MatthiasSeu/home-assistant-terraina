@@ -17,7 +17,7 @@ from .httpClient import TerrainaHttpClient
 from .platform_token import get_valid_app_token, is_app_token_valid, login_with_password
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["lawn_mower", "sensor"]
+PLATFORMS = ["lawn_mower", "sensor", "select"]
 
 _APP_TOKEN_CHECK_INTERVAL = timedelta(minutes=30)
 
