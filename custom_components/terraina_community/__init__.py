@@ -82,7 +82,6 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: TerrainaCoordinator = data["coordinator"]
-    entity_map: dict[str, list] = data.get("entities", {})
 
     region = entry.data.get("region", "eu")
 
@@ -110,7 +109,9 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
         sn = str(device["sn"])
 
         def _state_cb(state_dict, _sn=sn) -> None:
-            for entity in entity_map.get(_sn, []):
+            entities = data.get("entities", {}).get(_sn, [])
+            _LOGGER.debug("gRPC _state_cb for %s: %d entities, keys=%s", _sn, len(entities), list(state_dict.keys()))
+            for entity in entities:
                 entity.update_from_grpc(state_dict)
 
         stream = TerrainaGrpcStream(

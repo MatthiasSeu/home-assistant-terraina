@@ -202,9 +202,9 @@ class TerrainaGrpcStream:
             extractor = PayLoadExtractor(wrapper)
             state = extractor.extract()
             if state:
-                _LOGGER.info("gRPC device state sm=%r keys=%s", msg.sm, list(state.keys()))
+                _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
             else:
-                _LOGGER.info("gRPC msg type=%r sm=%r — no extractable state", msg.type, msg.sm)
+                _LOGGER.debug("gRPC msg type=%r sm=%r — no extractable state", msg.type, msg.sm)
         except Exception:
             _LOGGER.debug("Failed to parse gRPC payload (type=%r sm=%r)", msg.type, msg.sm, exc_info=True)
