@@ -57,6 +57,7 @@ The integration stores credentials securely in the HA config entry. If re-authen
 | `lawn_mower.<name>` | Lawn Mower | Mowing state + Start / Dock / Pause controls |
 | `sensor.<name>_battery` | Sensor | Battery level in % |
 | `select.<name>_working_mode` | Select | Working mode: `auto` / `manual` |
+| `sensor.<name>_schedule_sunday` … `_schedule_saturday` | Sensor (×7) | Mowing time window per weekday, e.g. `10:00 - 20:30`; `10:00 - 20:30 (off)` when disabled |
 
 ### Lawn Mower states
 
