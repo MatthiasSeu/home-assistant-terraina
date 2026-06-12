@@ -114,9 +114,10 @@ Modify the mowing schedule for a single weekday and immediately send the updated
 |-----------|------|----------|-------------|
 | `entity_id` | string | No | Target lawn mower entity. Can be omitted if only one mower is configured. |
 | `week` | integer | Yes | Weekday: `0`=Sunday, `1`=Monday, `2`=Tuesday, `3`=Wednesday, `4`=Thursday, `5`=Friday, `6`=Saturday |
-| `enabled` | boolean | Yes | `true` to enable mowing on this day, `false` to disable |
-| `start_time` | string | Yes | Mowing start time in `HH:MM` format |
-| `end_time` | string | Yes | Mowing end time in `HH:MM` format |
+| `slot` | integer | No | Time slot index for this day (0-based, default `0`). Use `slot: 1` to add/update a second mowing window on the same day. |
+| `enabled` | boolean | Yes | `true` to enable this slot, `false` to disable |
+| `start_time` | string | Yes | Mowing start time in `HH:MM` 24h format |
+| `end_time` | string | Yes | Mowing end time in `HH:MM` 24h format |
 
 ### Example — Developer Tools
 
@@ -139,6 +140,18 @@ data:
   enabled: true
   start_time: "09:00"
   end_time: "21:00"
+```
+
+### Example — Add a second mowing window on Monday (slot 1)
+
+```yaml
+service: terraina_community.set_schedule_day
+data:
+  week: 1
+  slot: 1          # second slot (0-based)
+  enabled: true
+  start_time: "15:00"
+  end_time: "18:00"
 ```
 
 ### Example — Automation (disable mowing on public holidays)

@@ -136,6 +136,7 @@ _SET_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Optional("entity_id"): str,
         vol.Required("week"): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
+        vol.Optional("slot", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=9)),
         vol.Required("enabled"): bool,
         vol.Required("start_time"): str,
         vol.Required("end_time"): str,
@@ -151,6 +152,7 @@ def _register_services(hass: HomeAssistant) -> None:
         from .lawn_mower import TerrainaLawnMower
 
         week = int(call.data["week"])
+        slot_idx = int(call.data.get("slot", 0))
         enabled = 1 if call.data["enabled"] else 0
         entity_id_filter = call.data.get("entity_id")
 
@@ -192,31 +194,31 @@ def _register_services(hass: HomeAssistant) -> None:
                         "Dock the mower first, then update the schedule."
                     )
 
-                # Merge the changed day into the current schedule
-                current = list(mower._schedule)
-                existing = next((d for d in current if d.get("week") == week), None)
-                if existing is None:
-                    updated_day = {
-                        "week": week, "enable": enabled,
-                        "startTime": start_min, "endTime": end_min,
-                        "mapId": 1, "boundaryId": -1, "regionId": -1, "needEdge": 1,
-                    }
-                    current.append(updated_day)
+                # Split current schedule into this day's slots and all other days
+                all_slots = list(mower._schedule)
+                day_slots = [d for d in all_slots if d.get("week") == week]
+                other_days = [d for d in all_slots if d.get("week") != week]
+
+                new_slot = {
+                    "week": week, "enable": enabled,
+                    "startTime": start_min, "endTime": end_min,
+                    "mapId": (day_slots[slot_idx] if slot_idx < len(day_slots) else {}).get("mapId", 1),
+                    "boundaryId": -1, "regionId": -1, "needEdge": 1,
+                }
+                if slot_idx < len(day_slots):
+                    day_slots[slot_idx] = new_slot   # update existing slot
                 else:
-                    current = [
-                        {**d, "enable": enabled, "startTime": start_min, "endTime": end_min}
-                        if d.get("week") == week else d
-                        for d in current
-                    ]
+                    day_slots.append(new_slot)        # add new slot
 
-                await http_client.set_schedule(config_entry, sn, current)
+                updated = sorted(other_days + day_slots, key=lambda d: d.get("week", 0))
+                await http_client.set_schedule(config_entry, sn, updated)
 
-                mower._schedule = sorted(current, key=lambda d: d.get("week", 0))
+                mower._schedule = updated
                 mower.async_write_ha_state()
                 found = True
                 _LOGGER.debug(
-                    "set_schedule_day: sn=%s week=%d enabled=%d %s-%s",
-                    sn, week, enabled, call.data["start_time"], call.data["end_time"],
+                    "set_schedule_day: sn=%s week=%d slot=%d enabled=%d %s-%s",
+                    sn, week, slot_idx, enabled, call.data["start_time"], call.data["end_time"],
                 )
 
         if not found:
