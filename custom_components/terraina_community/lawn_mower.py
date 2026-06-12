@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, WORKING_STATUS
@@ -50,7 +51,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity):
+class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity, RestoreEntity):
     """Represents a TERRAINA lawn mower.
 
     State is tracked optimistically (updated immediately on command) because
@@ -82,6 +83,14 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity)
         self._attr_unique_id = f"{DOMAIN}_{sn}"
         self._attr_name = device_name
         self._attr_activity: LawnMowerActivity | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            for activity in LawnMowerActivity:
+                if activity.value == last.state:
+                    self._attr_activity = activity
+                    break
 
     @property
     def device_info(self) -> DeviceInfo:

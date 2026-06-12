@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -42,7 +43,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TerrainarWorkingModeSelect(CoordinatorEntity[TerrainaCoordinator], SelectEntity):
+class TerrainarWorkingModeSelect(CoordinatorEntity[TerrainaCoordinator], SelectEntity, RestoreEntity):
     """Select entity to read and change the mower's working mode (auto / manual)."""
 
     _attr_options = ["auto", "manual"]
@@ -75,6 +76,12 @@ class TerrainarWorkingModeSelect(CoordinatorEntity[TerrainaCoordinator], SelectE
             manufacturer="DCK / TERRAINA",
             serial_number=self._sn,
         )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            if last.state in self._attr_options:
+                self._attr_current_option = last.state
 
     @callback
     def _handle_coordinator_update(self) -> None:

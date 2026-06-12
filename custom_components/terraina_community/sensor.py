@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
-    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -46,7 +46,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], SensorEntity):
+class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
@@ -76,6 +76,11 @@ class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], SensorEntity
             manufacturer="DCK / TERRAINA",
             serial_number=self._sn,
         )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()) is not None:
+            self._attr_native_value = last.native_value
 
     @callback
     def _handle_coordinator_update(self) -> None:
