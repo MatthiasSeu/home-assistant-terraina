@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Select Region",
+        "data": {
+          "country": "Country"
+        }
+      },
+      "platform_auth": {
+        "title": "TERRAINA Platform Login",
+        "description": "Enter your TERRAINA app credentials (same email/password as the mobile app). Required for the real-time gRPC device state stream.",
+        "data": {
+          "email": "Email address",
+          "password": "Password"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to TERRAINA server.",
+      "invalid_auth": "Invalid email or password. Please check your TERRAINA app credentials.",
+      "unknown": "Unexpected error."
+    }
+  }
+}

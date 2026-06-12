@@ -1,0 +1,12 @@
+{
+  "domain": "terraina_community",
+  "name": "TERRAINA Community",
+  "version": "1.0.0",
+  "config_flow": true,
+  "dependencies": [],
+  "requirements": ["protobuf>=6.30.0", "grpcio>=1.51.0"],
+  "codeowners": [],
+  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "loggers": ["custom_components.terraina_community"]
+}

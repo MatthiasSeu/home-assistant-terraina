@@ -203,6 +203,12 @@ cython_debug/
 
 .DS_Store
 
+# Claude Code memory
+.claude/
+
+# Extracted APK / reverse engineering artefacts
+release/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

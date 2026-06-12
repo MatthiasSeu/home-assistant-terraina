@@ -1,0 +1,6 @@
+# Phase 0 validation dependencies
+aiohttp>=3.9
+protobuf>=6.30.0
+
+# Optional — only needed for --test-grpc
+grpcio>=1.72.1
