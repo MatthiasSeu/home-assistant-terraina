@@ -164,12 +164,21 @@ class TerrainaGrpcStream:
 
             _LOGGER.debug("gRPC stream connected for %s", self._sn)
 
+            schedule_fetched = False   # reset per connection
             heartbeat_task = asyncio.ensure_future(self._heartbeat_writer(call))
             try:
                 async for msg in call:
                     if not self._running:
                         break
-                    await self._handle_message(msg)
+                    newly_active = await self._handle_message(msg)
+                    if newly_active and not schedule_fetched:
+                        # Mower just became active — grab schedule immediately
+                        try:
+                            await call.write(_query_schedule_msg(self._sn))
+                            schedule_fetched = True
+                            _LOGGER.debug("Triggered on-demand getSchedule for %s", self._sn)
+                        except Exception:
+                            pass
             finally:
                 heartbeat_task.cancel()
                 try:
@@ -199,20 +208,27 @@ class TerrainaGrpcStream:
             except Exception:
                 break
 
-    async def _handle_message(self, msg: platform_iot_streams_pb2.Out) -> None:
+    async def _handle_message(self, msg: platform_iot_streams_pb2.Out) -> bool:
+        """Handle one incoming gRPC message.
+
+        Returns True if the device just became active (postDeviceDetail push
+        with an active working status), so the caller can trigger on-demand
+        queries while the device is reachable.
+        """
         if msg.type == "heartbeat":
             _LOGGER.debug("gRPC heartbeat from server: %s", msg.payload)
-            return
+            return False
 
         # Server sends device-state responses with type="" (not "device")
         if msg.type not in ("device", ""):
             _LOGGER.debug("gRPC msg type=%r sm=%r (ignored)", msg.type, msg.sm)
-            return
+            return False
 
         if not msg.payload:
             _LOGGER.debug("gRPC msg type=%r sm=%r — empty payload (skipped)", msg.type, msg.sm)
-            return
+            return False
 
+        device_active = False
         try:
             wrapper = DeviceMessageWrapper.from_base64(msg.payload)
             extractor = PayLoadExtractor(wrapper)
@@ -220,7 +236,11 @@ class TerrainaGrpcStream:
             if state:
                 _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
+                # Signal active push so caller can trigger on-demand queries
+                if "postDeviceDetail" in state:
+                    device_active = True
             else:
                 _LOGGER.debug("gRPC msg type=%r sm=%r — no extractable state", msg.type, msg.sm)
         except Exception:
             _LOGGER.debug("Failed to parse gRPC payload (type=%r sm=%r)", msg.type, msg.sm, exc_info=True)
+        return device_active

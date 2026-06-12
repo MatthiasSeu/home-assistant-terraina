@@ -51,6 +51,10 @@ async def async_setup_entry(
         entity_map.setdefault(sn, []).append(battery)
         entities.append(battery)
 
+        height = TerrainaCuttingHeightSensor(coordinator, entry, sn, name, model)
+        entity_map.setdefault(sn, []).append(height)
+        entities.append(height)
+
         # Create one sensor per weekday, Monday first
         for week in _WEEK_DISPLAY_ORDER:
             sched = TerrainaScheduleSensor(coordinator, entry, sn, name, model, week)
@@ -119,6 +123,59 @@ class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], RestoreSenso
             return
         self._attr_native_value = _POWER_TO_PCT.get(int(power))
         _LOGGER.debug("Battery for %s: power=%r → %s%%", self._sn, power, self._attr_native_value)
+        self.async_write_ha_state()
+
+
+class TerrainaCuttingHeightSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
+    """Sensor showing the current AI cutting height level."""
+
+    _attr_icon = "mdi:ruler"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: TerrainaCoordinator,
+        entry: ConfigEntry,
+        sn: str,
+        device_name: str,
+        model_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._sn = sn
+        self._device_name = device_name
+        self._model_name = model_name
+        self._attr_unique_id = f"{DOMAIN}_{sn}_cutting_height"
+        self._attr_name = f"{device_name} Cutting Height"
+        self._attr_native_value: int | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _device_info(self._sn, self._device_name, self._model_name)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()) is not None:
+            self._attr_native_value = last.native_value
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        info: dict = {}
+        if "postDeviceDetail" in state_dict:
+            info = state_dict["postDeviceDetail"].get("info") or {}
+        elif "getDeviceDetail" in state_dict:
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            info = data.get("info") or {}
+        else:
+            return
+
+        height = info.get("aiHeight")
+        if height is None:
+            return
+        self._attr_native_value = int(height)
+        _LOGGER.debug("Cutting height for %s: %s", self._sn, height)
         self.async_write_ha_state()
 
 
