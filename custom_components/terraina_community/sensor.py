@@ -23,7 +23,9 @@ _LOGGER = logging.getLogger(__name__)
 
 _POWER_TO_PCT = {0: 0, 1: 25, 2: 50, 3: 75, 4: 100}
 
+# Protocol: 0=Sun, 1=Mon, …, 6=Sat.  Display order: Mon first.
 _WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+_WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]   # Mon → … → Sat → Sun
 
 
 def _fmt_min(minutes: int) -> str:
@@ -49,7 +51,8 @@ async def async_setup_entry(
         entity_map.setdefault(sn, []).append(battery)
         entities.append(battery)
 
-        for week in range(7):
+        # Create one sensor per weekday, Monday first
+        for week in _WEEK_DISPLAY_ORDER:
             sched = TerrainaScheduleSensor(coordinator, entry, sn, name, model, week)
             entity_map.setdefault(sn, []).append(sched)
             entities.append(sched)
@@ -120,7 +123,16 @@ class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], RestoreSenso
 
 
 class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
-    """One sensor per weekday showing the mowing time window for that day."""
+    """One sensor per weekday — supports multiple time slots per day.
+
+    State shows all slots separated by ' / '.
+    Each slot can be individually enabled or disabled.
+    Example states:
+      "10:00 - 20:30"                        (1 slot, enabled)
+      "10:00 - 20:30 (off)"                  (1 slot, disabled)
+      "08:00 - 12:00 / 15:00 - 20:00"        (2 slots, both on)
+      "08:00 - 12:00 / 15:00 - 20:00 (off)"  (2 slots, second off)
+    """
 
     _attr_icon = "mdi:calendar-clock"
 
@@ -138,12 +150,12 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
         self._device_name = device_name
         self._model_name = model_name
         self._week = week
+        # unique_id uses the protocol week number (0=Sun … 6=Sat)
         self._attr_unique_id = f"{DOMAIN}_{sn}_schedule_{week}"
+        # Name: device name is the prefix — entity_id will be sensor.<device>_schedule_<day>
         self._attr_name = f"{device_name} Schedule {_WEEKDAY_NAMES[week]}"
         self._attr_native_value: str | None = None
-        self._start_time: str | None = None
-        self._end_time: str | None = None
-        self._enabled: bool | None = None
+        self._slots: list[dict] = []
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -151,13 +163,17 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
 
     @property
     def extra_state_attributes(self) -> dict:
-        if self._start_time is None:
+        if not self._slots:
             return {}
-        return {
-            "start_time": self._start_time,
-            "end_time": self._end_time,
-            "enabled": self._enabled,
-        }
+        if len(self._slots) == 1:
+            # Flat attributes for the single-slot case (easy to use in automations)
+            return {
+                "start_time": self._slots[0]["start_time"],
+                "end_time": self._slots[0]["end_time"],
+                "enabled": self._slots[0]["enabled"],
+            }
+        # Multiple slots: list with per-slot details
+        return {"slots": self._slots}
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -177,21 +193,32 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
         if isinstance(days, dict):
             days = [days]
 
-        day = next((d for d in days if d.get("week") == self._week), None)
-        if day is None:
+        # Collect ALL slots for this weekday (protocol may carry multiple)
+        day_slots = [d for d in days if d.get("week") == self._week]
+        if not day_slots:
             return
 
-        enabled = bool(day.get("enable", 1))
-        start = _fmt_min(int(day["startTime"]))
-        end = _fmt_min(int(day["endTime"]))
+        self._slots = [
+            {
+                "start_time": _fmt_min(int(s["startTime"])),
+                "end_time": _fmt_min(int(s["endTime"])),
+                "enabled": bool(s.get("enable", 1)),
+            }
+            for s in day_slots
+        ]
 
-        self._enabled = enabled
-        self._start_time = start
-        self._end_time = end
-        self._attr_native_value = f"{start} - {end}" if enabled else f"{start} - {end} (off)"
+        # Build human-readable state string
+        parts = []
+        for slot in self._slots:
+            part = f"{slot['start_time']} - {slot['end_time']}"
+            if not slot["enabled"]:
+                part += " (off)"
+            parts.append(part)
+        self._attr_native_value = " / ".join(parts)
 
         _LOGGER.debug(
-            "Schedule for %s week=%d (%s): %s-%s enabled=%s",
-            self._sn, self._week, _WEEKDAY_NAMES[self._week], start, end, enabled,
+            "Schedule %s week=%d (%s): %d slot(s): %s",
+            self._sn, self._week, _WEEKDAY_NAMES[self._week],
+            len(self._slots), self._attr_native_value,
         )
         self.async_write_ha_state()
