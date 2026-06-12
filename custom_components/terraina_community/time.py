@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import TerrainaCoordinator
 from .httpClient import TerrainaHttpClient
-from .sensor import _WEEK_DISPLAY_ORDER, _device_info, schedule_day_label
+from .sensor import _WEEK_DISPLAY_ORDER, _device_info, schedule_control_label
 from .switch import _extract_day_slots, _find_mower
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class TerrainaScheduleTimeEntity(CoordinatorEntity[TerrainaCoordinator], TimeEnt
         kind = "End" if is_end else "Start"
         uid_kind = "end" if is_end else "start"
         self._attr_unique_id = f"{DOMAIN}_{sn}_schedule_{uid_kind}_{week}"
-        self._attr_name = f"{device_name} Schedule {schedule_day_label(week)} {kind}"
+        self._attr_name = f"{device_name} {schedule_control_label(week)} {kind}"
         self._attr_icon = "mdi:clock-end" if is_end else "mdi:clock-start"
         self._attr_native_value: dt_time | None = None
 

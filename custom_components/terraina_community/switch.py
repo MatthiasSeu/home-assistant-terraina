@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import TerrainaCoordinator
 from .httpClient import TerrainaHttpClient
-from .sensor import _WEEK_DISPLAY_ORDER, _device_info, schedule_day_label
+from .sensor import _WEEK_DISPLAY_ORDER, _device_info, schedule_control_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class TerrainaScheduleSwitch(CoordinatorEntity[TerrainaCoordinator], SwitchEntit
         self._http_client = http_client
         self._entry = entry
         self._attr_unique_id = f"{DOMAIN}_{sn}_schedule_enabled_{week}"
-        self._attr_name = f"{device_name} Schedule {schedule_day_label(week)} Enabled"
+        self._attr_name = f"{device_name} {schedule_control_label(week)} Enabled"
         self._attr_is_on: bool | None = None
 
     @property

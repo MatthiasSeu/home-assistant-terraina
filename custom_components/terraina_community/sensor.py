@@ -25,6 +25,7 @@ _POWER_TO_PCT = {0: 0, 1: 25, 2: 50, 3: 75, 4: 100}
 
 # Protocol: 0=Sun, 1=Mon, …, 6=Sat.  Display order: Mon first.
 _WEEKDAY_NAMES = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
+_DAY_ABBR      = {0: "Sun",    1: "Mon",    2: "Tue",     3: "Wed",       4: "Thu",      5: "Fri",    6: "Sat"}
 # Mon=1 … Sat=6, Sun=7 → alphabetical sort of "N-Dayname" matches week order
 _WEEK_DISPLAY_NUM = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 0: 7}
 _WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]   # Mon → … → Sat → Sun
@@ -35,8 +36,13 @@ def _fmt_min(minutes: int) -> str:
 
 
 def schedule_day_label(week: int) -> str:
-    """Return e.g. '1-Monday' for correct alphabetical sort in HA device page."""
+    """Full label for Sensors section: '1-Monday'."""
     return f"{_WEEK_DISPLAY_NUM[week]}-{_WEEKDAY_NAMES[week]}"
+
+
+def schedule_control_label(week: int) -> str:
+    """Short label for Controls section: '1-Mon' (fits in HA device card width)."""
+    return f"{_WEEK_DISPLAY_NUM[week]}-{_DAY_ABBR[week]}"
 
 
 async def async_setup_entry(
