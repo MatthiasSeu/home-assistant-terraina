@@ -18,7 +18,18 @@
         "step": {
             "pick_implementation": {
                 "title": "Pick authentication method"
+            },
+            "platform_auth": {
+                "title": "TERRAINA Platform Login",
+                "description": "Enter your TERRAINA app credentials (same email/password you use in the TERRAINA mobile app). These are needed for the real-time gRPC device state stream.",
+                "data": {
+                    "email": "Email address",
+                    "password": "Password"
+                }
             }
+        },
+        "error": {
+            "invalid_auth": "Invalid email or password. Please check your TERRAINA app credentials."
         }
     }
 }

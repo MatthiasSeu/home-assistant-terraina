@@ -38,6 +38,7 @@ class TerrainaHttpClient:
         """Initialize the HttpClient."""
         self._base_url = base_url
         self._region = region
+        # Ory OAuth2 token refresh endpoint (separate from the platform app-token)
         if region in SERVER_DOMAIN_NAME:
             self._token_url = f"{SERVER_DOMAIN_NAME[region]}/user-center/oauth2/token"
         self._session = session
