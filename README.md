@@ -288,7 +288,10 @@ Issues and pull requests welcome via GitHub.
 
 ## Contributors
 
-- **Claude (Anthropic)** — gRPC stream integration, battery & schedule sensors, working mode select, multi-slot schedule service, state restoration, deploy tooling
+| | Role |
+|---|---|
+| **Matthias Seuchter** | Product vision, feature ideas, real-world testing on a DCK KDRM210, feedback and direction |
+| **Claude (Anthropic)** | Technical implementation — gRPC reverse engineering, all Python code, sensors, services, deploy tooling |
 
 ---
 
