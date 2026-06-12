@@ -142,16 +142,40 @@ data:
   end_time: "21:00"
 ```
 
-### Example — Add a second mowing window on Monday (slot 1)
+### Example — Three mowing windows on Monday (ideal setup)
 
 ```yaml
+# Slot 0 — morning
 service: terraina_community.set_schedule_day
 data:
   week: 1
-  slot: 1          # second slot (0-based)
+  slot: 0
   enabled: true
-  start_time: "15:00"
-  end_time: "18:00"
+  start_time: "07:00"
+  end_time: "10:00"
+
+# Slot 1 — midday
+service: terraina_community.set_schedule_day
+data:
+  week: 1
+  slot: 1
+  enabled: true
+  start_time: "12:00"
+  end_time: "14:00"
+
+# Slot 2 — evening
+service: terraina_community.set_schedule_day
+data:
+  week: 1
+  slot: 2
+  enabled: true
+  start_time: "17:00"
+  end_time: "20:30"
+```
+
+The corresponding schedule sensor will then show:
+```
+sensor.dck_kdrm210_schedule_monday: "07:00 - 10:00 / 12:00 - 14:00 / 17:00 - 20:30"
 ```
 
 ### Example — Automation (disable mowing on public holidays)
@@ -252,6 +276,14 @@ HA config entry
 - Platform tokens (`kk5fd5Ce`) — obtained via password grant, refreshed automatically every 30 min
 - Device status — decoded from a 15-bit integer field (`split_bits()` in `grpc_util.py`)
 - Schedule proto — uses repeated `Params` with the same key `schedule`, built manually via raw protobuf API
+
+---
+
+## Maintainer
+
+**Matthias Seuchter** — [matthias.seuchter@gmail.com](mailto:matthias.seuchter@gmail.com)
+
+Issues and pull requests welcome via GitHub.
 
 ---
 
