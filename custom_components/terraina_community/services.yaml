@@ -1,0 +1,42 @@
+set_schedule_day:
+  name: Set schedule day
+  description: >
+    Update the mowing schedule for one weekday. Sends the full updated schedule
+    to the device. The schedule only applies when the mower is in auto mode.
+  fields:
+    entity_id:
+      name: Entity
+      description: "Lawn mower entity to target (optional if only one mower is configured)"
+      required: false
+      selector:
+        entity:
+          domain: lawn_mower
+    week:
+      name: Weekday
+      description: "Day of the week: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday"
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 6
+          mode: box
+    enabled:
+      name: Enabled
+      description: "Enable mowing on this day"
+      required: true
+      selector:
+        boolean:
+    start_time:
+      name: Start time
+      description: "Mowing start time in HH:MM format (e.g. '10:00')"
+      required: true
+      example: "10:00"
+      selector:
+        time:
+    end_time:
+      name: End time
+      description: "Mowing end time in HH:MM format (e.g. '20:30')"
+      required: true
+      example: "20:30"
+      selector:
+        time:

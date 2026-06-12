@@ -61,6 +61,16 @@ def _query_state_msg(sn: str) -> platform_iot_streams_pb2.In:
     return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
 
 
+def _query_schedule_msg(sn: str) -> platform_iot_streams_pb2.In:
+    msg_id = "ha-" + random_code()
+    svc_id = "ha-" + random_code()
+    msg = DeviceMessageWrapper()
+    msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
+        svc_id, "get", {"getSchedule": None}
+    )
+    return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
+
+
 class TerrainaGrpcStream:
     """Manages a single long-lived gRPC stream for one TERRAINA device."""
 
@@ -173,13 +183,19 @@ class TerrainaGrpcStream:
         try:
             await call.write(_heartbeat_msg(self._sn))
             await call.write(_query_state_msg(self._sn))
+            await call.write(_query_schedule_msg(self._sn))
         except Exception:
             return
+        tick = 0
         while True:
             await asyncio.sleep(GRPC_HEARTBEAT_INTERVAL)
+            tick += 1
             try:
                 await call.write(_heartbeat_msg(self._sn))
                 await call.write(_query_state_msg(self._sn))
+                # Refresh schedule every ~5 minutes (10 heartbeat intervals of 30s)
+                if tick % 10 == 0:
+                    await call.write(_query_schedule_msg(self._sn))
             except Exception:
                 break
 

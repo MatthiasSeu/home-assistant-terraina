@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
-from datetime import timedelta
 
 from .const import DOMAIN, GRPC_HOST, SERVER_DOMAIN_NAME
 from .coordinator import TerrainaCoordinator
@@ -43,6 +46,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    _register_services(hass)
 
     # Start gRPC streams if we have an app_token
     if entry.data.get("app_token"):
@@ -125,6 +130,95 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
         stream.start()
         data["grpc_streams"][sn] = stream
         _LOGGER.debug("gRPC stream started for device %s", sn)
+
+
+_SET_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): str,
+        vol.Required("week"): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
+        vol.Required("enabled"): bool,
+        vol.Required("start_time"): str,
+        vol.Required("end_time"): str,
+    }
+)
+
+
+def _register_services(hass: HomeAssistant) -> None:
+    if hass.services.has_service(DOMAIN, "set_schedule_day"):
+        return
+
+    async def _handle_set_schedule_day(call: ServiceCall) -> None:
+        from .lawn_mower import TerrainaLawnMower
+
+        week = int(call.data["week"])
+        enabled = 1 if call.data["enabled"] else 0
+        entity_id_filter = call.data.get("entity_id")
+
+        def _to_min(t: str) -> int:
+            h, m = t.split(":")
+            return int(h) * 60 + int(m)
+
+        start_min = _to_min(call.data["start_time"])
+        end_min = _to_min(call.data["end_time"])
+
+        found = False
+        for _entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if not isinstance(data, dict):
+                continue
+            entity_map = data.get("entities", {})
+            http_client = data.get("http_client")
+            config_entry = hass.config_entries.async_get_entry(_entry_id)
+            if not config_entry or not http_client:
+                continue
+
+            for sn, entities in entity_map.items():
+                mower = next(
+                    (e for e in entities if isinstance(e, TerrainaLawnMower)), None
+                )
+                if mower is None:
+                    continue
+                if entity_id_filter and mower.entity_id != entity_id_filter:
+                    continue
+
+                # Merge the changed day into the current schedule
+                current = list(mower._schedule)
+                existing = next((d for d in current if d.get("week") == week), None)
+                if existing is None:
+                    updated_day = {
+                        "week": week, "enable": enabled,
+                        "startTime": start_min, "endTime": end_min,
+                        "mapId": 1, "boundaryId": -1, "regionId": -1, "needEdge": 1,
+                    }
+                    current.append(updated_day)
+                else:
+                    current = [
+                        {**d, "enable": enabled, "startTime": start_min, "endTime": end_min}
+                        if d.get("week") == week else d
+                        for d in current
+                    ]
+
+                await http_client.set_schedule(config_entry, sn, current)
+
+                mower._schedule = sorted(current, key=lambda d: d.get("week", 0))
+                mower.async_write_ha_state()
+                found = True
+                _LOGGER.debug(
+                    "set_schedule_day: sn=%s week=%d enabled=%d %s-%s",
+                    sn, week, enabled, call.data["start_time"], call.data["end_time"],
+                )
+
+        if not found:
+            raise HomeAssistantError(
+                f"No TERRAINA lawn mower entity found"
+                + (f" matching {entity_id_filter}" if entity_id_filter else "")
+            )
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_schedule_day",
+        _handle_set_schedule_day,
+        schema=_SET_SCHEDULE_SCHEMA,
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

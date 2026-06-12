@@ -23,6 +23,12 @@ from .httpClient import TerrainaHttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
+_WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+
+def _fmt_min(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -83,6 +89,7 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
         self._attr_unique_id = f"{DOMAIN}_{sn}"
         self._attr_name = device_name
         self._attr_activity: LawnMowerActivity | None = None
+        self._schedule: list[dict] = []
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -119,6 +126,8 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
             # poll response: {'getDeviceDetail': {'data': {'info': {...}}}}
             data = state_dict["getDeviceDetail"].get("data") or {}
             info = data.get("info") or {}
+
+        self._update_schedule(state_dict)
 
         raw = info.get("status") or state_dict.get("status") or state_dict.get("workStatus")
         if raw is None:
@@ -168,6 +177,17 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
         )
         self.async_write_ha_state()
 
+    def _update_schedule(self, state_dict: dict) -> None:
+        if "getSchedule" not in state_dict:
+            return
+        data = state_dict["getSchedule"].get("data") or {}
+        global_sche = data.get("globalSche") or {}
+        days = global_sche.get("schedule") or []
+        if isinstance(days, dict):
+            days = [days]
+        if days:
+            self._schedule = sorted(days, key=lambda d: d.get("week", 0))
+
     def _update_path_attrs(self, state_dict: dict) -> None:
         if "getPath" not in state_dict:
             return
@@ -183,7 +203,16 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
 
     @property
     def extra_state_attributes(self) -> dict:
-        return getattr(self, "_extra", {})
+        attrs = dict(getattr(self, "_extra", {}))
+        if self._schedule:
+            attrs["schedule"] = {
+                _WEEKDAY_NAMES[d["week"]]: (
+                    f"{_fmt_min(d['startTime'])} - {_fmt_min(d['endTime'])}"
+                    + ("" if d.get("enable") else " (disabled)")
+                )
+                for d in self._schedule
+            }
+        return attrs
 
     # ------------------------------------------------------------------
     # Commands — optimistic state update while gRPC state is unavailable

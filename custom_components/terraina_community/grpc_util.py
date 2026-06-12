@@ -1,5 +1,6 @@
 """gRPC message builders for the TERRAINA Community integration."""
 
+import base64
 import logging
 
 from . import platform_iot_streams_pb2
@@ -82,6 +83,61 @@ class MessageBuilder:
             {"setWorkMode": {"manualModeType": manual_mode_type}},
         )
         return msg.to_base64()
+
+    def build_set_schedule_payload(
+        self, serial_number: str, schedule_days: list[dict]
+    ) -> str:
+        """Produce base64 payload for setSchedule command.
+
+        schedule_days: list of dicts with keys week(0-6), enable(0/1),
+        startTime(minutes), endTime(minutes), mapId, boundaryId, regionId, needEdge.
+        ParamsWrapper.set_value cannot serialize Python lists, so we build the
+        repeated 'schedule' params manually using the raw proto API.
+        """
+        from .terraina_pb2 import DeviceMessage
+
+        msg_id = self._HA_PREFIX + random_code()
+        service_id = self._HA_PREFIX + random_code()
+
+        proto = DeviceMessage()
+        proto.version = self._VERSION
+        proto.id = msg_id
+        proto.sn = serial_number
+        proto.time = utc_now_str()
+
+        svc = proto.services
+        svc.id = service_id
+        svc.name = "set"
+
+        # Top-level param: setSchedule
+        set_sche = svc.params.add()
+        set_sche.key = "setSchedule"
+
+        type_p = set_sche.params.add()
+        type_p.key = "type"
+        type_p.intValue = 0
+
+        global_sche = set_sche.params.add()
+        global_sche.key = "globalSche"
+
+        def _add_int(parent, k: str, v: int) -> None:
+            p = parent.params.add()
+            p.key = k
+            p.intValue = int(v)
+
+        for day in schedule_days:
+            day_p = global_sche.params.add()
+            day_p.key = "schedule"
+            _add_int(day_p, "enable", day.get("enable", 1))
+            _add_int(day_p, "week", day["week"])
+            _add_int(day_p, "startTime", day["startTime"])
+            _add_int(day_p, "endTime", day["endTime"])
+            _add_int(day_p, "mapId", day.get("mapId", 1))
+            _add_int(day_p, "boundaryId", day.get("boundaryId", -1))
+            _add_int(day_p, "regionId", day.get("regionId", -1))
+            _add_int(day_p, "needEdge", day.get("needEdge", 1))
+
+        return base64.b64encode(proto.SerializeToString()).decode()
 
 
 def split_bits(value: int) -> dict:
