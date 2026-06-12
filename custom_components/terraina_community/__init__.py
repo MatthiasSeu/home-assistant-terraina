@@ -180,6 +180,18 @@ def _register_services(hass: HomeAssistant) -> None:
                 if entity_id_filter and mower.entity_id != entity_id_filter:
                     continue
 
+                # Device rejects schedule changes while actively mowing/returning
+                from homeassistant.components.lawn_mower import LawnMowerActivity
+                if mower._attr_activity in (
+                    LawnMowerActivity.MOWING,
+                    LawnMowerActivity.RETURNING,
+                ):
+                    raise HomeAssistantError(
+                        f"Cannot change the schedule while the mower is active "
+                        f"({mower._attr_activity.value}). "
+                        "Dock the mower first, then update the schedule."
+                    )
+
                 # Merge the changed day into the current schedule
                 current = list(mower._schedule)
                 existing = next((d for d in current if d.get("week") == week), None)

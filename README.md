@@ -99,6 +99,8 @@ Days with `(disabled)` are configured but currently not active.
 
 > **Note:** The mowing schedule only takes effect when the mower is in **Auto** mode. In Manual mode, the schedule is ignored by the device.
 
+> **Note:** The schedule can only be **read** while the mower is actively mowing. It cannot be changed while a task is running — the device rejects schedule writes mid-task (same limitation as the official app). Dock the mower first, then update the schedule.
+
 ---
 
 ## Service: `terraina_community.set_schedule_day`
@@ -213,6 +215,7 @@ docker logs home-assistant 2>&1 | grep "working_mode\|Working mode"
 | No state updates | gRPC stream not connected | Check logs: `docker logs home-assistant 2>&1 \| grep grpc_stream` |
 | Schedule not updating | Mower idle → server responds slowly | Wait 30 s after mower becomes active, or check debug logs |
 | `set_schedule_day` has no effect | Mower is in Manual mode | Switch Working Mode to `auto` first — schedule is ignored in manual mode |
+| `set_schedule_day` raises error "Cannot change the schedule while active" | Device rejects schedule changes mid-task | Dock the mower first, then update the schedule |
 
 ---
 

@@ -3,6 +3,8 @@ set_schedule_day:
   description: >
     Update the mowing schedule for one weekday. Sends the full updated schedule
     to the device. The schedule only applies when the mower is in auto mode.
+    The mower must be docked (not actively mowing or returning) — the device
+    rejects schedule changes while an active task is running.
   fields:
     entity_id:
       name: Entity
