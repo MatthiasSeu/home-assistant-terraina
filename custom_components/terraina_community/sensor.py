@@ -24,12 +24,19 @@ _LOGGER = logging.getLogger(__name__)
 _POWER_TO_PCT = {0: 0, 1: 25, 2: 50, 3: 75, 4: 100}
 
 # Protocol: 0=Sun, 1=Mon, …, 6=Sat.  Display order: Mon first.
-_WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+_WEEKDAY_NAMES = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
+# Mon=1 … Sat=6, Sun=7 → alphabetical sort of "N-Dayname" matches week order
+_WEEK_DISPLAY_NUM = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 0: 7}
 _WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]   # Mon → … → Sat → Sun
 
 
 def _fmt_min(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def schedule_day_label(week: int) -> str:
+    """Return e.g. '1-Monday' for correct alphabetical sort in HA device page."""
+    return f"{_WEEK_DISPLAY_NUM[week]}-{_WEEKDAY_NAMES[week]}"
 
 
 async def async_setup_entry(
@@ -209,8 +216,7 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
         self._week = week
         # unique_id uses the protocol week number (0=Sun … 6=Sat)
         self._attr_unique_id = f"{DOMAIN}_{sn}_schedule_{week}"
-        # Name: device name is the prefix — entity_id will be sensor.<device>_schedule_<day>
-        self._attr_name = f"{device_name} Schedule {_WEEKDAY_NAMES[week]}"
+        self._attr_name = f"{device_name} Schedule {schedule_day_label(week)}"
         self._attr_native_value: str | None = None
         self._slots: list[dict] = []
 
@@ -275,7 +281,7 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
 
         _LOGGER.debug(
             "Schedule %s week=%d (%s): %d slot(s): %s",
-            self._sn, self._week, _WEEKDAY_NAMES[self._week],
+            self._sn, self._week, _WEEKDAY_NAMES[self._week],  # type: ignore[index]
             len(self._slots), self._attr_native_value,
         )
         self.async_write_ha_state()
