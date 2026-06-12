@@ -28,21 +28,26 @@ echo "  Quelle : $COMPONENT_SRC"
 echo "  NAS    : ${NAS_USER}@${NAS_IP}:${NAS_UPLOAD_DIR}"
 echo ""
 
-# ── Schritt 1: Tarball erstellen ──────────────────────────────────
-echo "[1/3] Erstelle Tarball ..."
+# ── Schritt 1: Versions-Datei schreiben ───────────────────────────
+DEPLOY_VERSION="$(date +%Y%m%d%H%M)"
+echo "Version: $DEPLOY_VERSION" > "$COMPONENT_SRC/deployed_version.txt"
+echo "[1/3] Deploy-Version: $DEPLOY_VERSION"
+
+# ── Schritt 2: Tarball erstellen ──────────────────────────────────
+echo "[2/3] Erstelle Tarball ..."
 tar czf "$TARBALL" -C "$(dirname "$COMPONENT_SRC")" terraina_community/
 echo "      $TARBALL  ($(du -sh "$TARBALL" | cut -f1))"
 
-# ── Schritt 2: Upload auf NAS ─────────────────────────────────────
+# ── Schritt 3: Upload auf NAS ─────────────────────────────────────
 echo ""
-echo "[2/3] Übertrage auf NAS ..."
+echo "[3/3] Übertrage auf NAS ..."
 scp "$TARBALL"        "${NAS_USER}@${NAS_IP}:${NAS_UPLOAD_DIR}/terraina_community.tar.gz"
 scp "$NAS_SCRIPT_SRC" "${NAS_USER}@${NAS_IP}:${NAS_UPLOAD_DIR}/nas_install.sh"
 echo "      Übertragung abgeschlossen."
 
-# ── Schritt 3: Anleitung ausgeben ─────────────────────────────────
+# ── Anleitung ausgeben ────────────────────────────────────────────
 echo ""
-echo "[3/3] Jetzt auf dem NAS ausführen:"
+echo "Jetzt auf dem NAS ausführen:"
 echo "──────────────────────────────────────────────────────────"
 echo "  ssh ${NAS_USER}@${NAS_IP}"
 echo "  sudo -i"

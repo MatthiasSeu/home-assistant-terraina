@@ -26,6 +26,13 @@ fi
 echo ""
 echo "[1/5] Entpacke $TARBALL ..."
 tar xzf "$TARBALL" -C "$EXTRACT_DIR"
+DEPLOY_VERSION_FILE="$EXTRACT_DIR/$COMPONENT/deployed_version.txt"
+if [[ -f "$DEPLOY_VERSION_FILE" ]]; then
+  DEPLOY_VERSION="$(cat "$DEPLOY_VERSION_FILE")"
+  echo "      $DEPLOY_VERSION"
+else
+  echo "      (kein deployed_version.txt gefunden)"
+fi
 echo "      $EXTRACT_DIR/$COMPONENT — OK"
 
 # ── Schritt 2: In Container kopieren ─────────────────────────────

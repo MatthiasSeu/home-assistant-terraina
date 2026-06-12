@@ -215,3 +215,6 @@ marimo/_lsp/
 __marimo__/
 
 updateFromUpstream.sh
+
+# Deploy-Versions-Datei (wird beim Deploy automatisch generiert)
+custom_components/terraina_community/deployed_version.txt
