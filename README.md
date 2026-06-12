@@ -285,6 +285,10 @@ HA config entry
 
 Issues and pull requests welcome via GitHub.
 
+## Contributors
+
+- **Claude (Anthropic)** — gRPC stream integration, battery & schedule sensors, working mode select, multi-slot schedule service, state restoration, deploy tooling
+
 ---
 
 ## Credits
