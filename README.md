@@ -1,83 +1,78 @@
-# TERRAINA Integration Guide 
+# TERRAINA Community Integration for Home Assistant
 
-Version: 1.0.0
+Version: 1.1.0
 
-## Overview
+A community fork of [DCK-China/home-assistant-terraina](https://github.com/DCK-China/home-assistant-terraina) with extended functionality.
 
-- Control TERRAINA robot mowers from Home Assistant, with a focus on the "Back to dock" command.
-- Supports multiple countries with dedicated OAuth/token endpoints.
-- Uses Home Assistant Config Flow with OAuth2 authentication.
+## What's new in this fork
+
+- **`lawn_mower` platform** — native HA lawn mower entity with Start / Dock / Pause controls
+- **Real-time gRPC state stream** — device state updates within seconds via the TERRAINA IoT stream endpoint, no polling delay
+- **Auto-relogin** — when the phone app invalidates the session, HA automatically re-authenticates using stored credentials
+- **DataUpdateCoordinator** polling every 30 s as fallback
+
+## Supported devices
+
+TERRAINA / DCK KDRM210, KDRM220 (and compatible models using the DCK IoT platform).
 
 ## Installation
 
-### Method 1: HACS (Recommended)
-  - Make sure HACS is installed.
-  - Go to HACS → Integrations → Three dots menu (⋮) → Custom repositories
-  - Add https://github.com/DCK-China/home-assistant-terraina as repository URL with category "Integration"
-  - Go to HACS → Integrations → + → Search for "TERRAINA"
-  - Install and restart Home Assistant
-### Method 2: Manual Installation
-  - Copy the `custom_components/terraina` folder into the `/config/custom_components` directory.
+### Manual
 
-  - **If Home Assistant is running in a container, copy the `terraina` directory to the corresponding `custom_components` directory in the data volume.**
-  - Restart Home Assistant.
+1. Copy `custom_components/terraina_community/` into `/config/custom_components/` on your Home Assistant instance.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services → Add Integration** and search for **TERRAINA Community**.
 
-## Configuration Steps
+### Deploy script (NAS / container)
 
-1. After installation, navigate to Home Assistant UI: **Settings → Devices & Services → Add Integration** → search for **TERRAINA**. 
+```bash
+# Step 1 — local machine
+bash tools/deploy_to_nas.sh
 
-2. Select your country and complete the OAuth login process.
-
-3. Upon successful authentication, entities and services will be created automatically.
-
-   All devices already bound in your TERRAINA app will be registered as entities and displayed on the home page.
-
-## Features
-
-### Sync Devices with Your TERRAINA App
-- The TERRAINA Integration automatically syncs devices with your TERRAINA app. When new devices are bound in the app, they will be registered in the TERRAINA integration. The same applies when unbinding devices.
-
-### Back to Dock Service
-
-- A dedicated service is registered for each mower: `terraina.back_<device_name>_<serial_last_6_bits>`.
-- Can be called via **Developer Tools → Services**, automations, or scripts.
-
-**Example automation / 自动化示例：**
-
-```yaml
-automation:
-  - alias: "Mower back to dock at 18:00"
-    trigger:
-      - platform: time
-        at: "18:00:00"
-    action:
-      - service: terraina.back_kdrm220_123456
+# Step 2 — on the NAS (as root)
+ssh nasadmin@<your-nas>
+sudo -i
+bash /tmp/nas_install.sh
 ```
 
-### Entities
+## Configuration
 
-- Each mower has a sensor showing its binding state: `sensor.<name>_(<serial>)_binding`.
+1. Select your country/region.
+2. Complete the OAuth2 login (TERRAINA account).
+3. Enter your TERRAINA app email and password — required for the gRPC stream and automatic token renewal.
 
-## Troubleshooting
+The integration stores credentials securely in the HA config entry. If a re-authentication is needed, a notification will appear in the HA UI.
 
-- The TERRAINA Integration depends on My Home Assistant. Please verify that the address linked at `https://my.home-assistant.io` is reachable from your Home Assistant instance.
-- Service not found: confirm integration loaded and serial slug matches service name.
-- No response to back command: ensure mower online and network reachable; check HA logs.
-- Some trouble not listed: please contact us.
+## Entities
 
-## Logging
+| Entity | Type | Description |
+|--------|------|-------------|
+| `lawn_mower.<name>` | Lawn Mower | Mowing state, Start / Dock / Pause controls |
 
-Enable debug logs when needed:
+**Lawn Mower states:** Mowing · Returning · Paused · Docked · Error
+
+## Debug logging
 
 ```yaml
 logger:
   default: info
   logs:
-    homeassistant.components.terraina: debug
+    custom_components.terraina_community: debug
 ```
 
-## Maintainer
+## Troubleshooting
 
-- Codeowner: @DCK-China
+- **Re-authentication dialog** — appears when the session has been invalidated (e.g. by the phone app). Enter email + password again to restore the gRPC stream.
+- **No state updates** — check that the gRPC stream is connected: `docker logs home-assistant 2>&1 | grep grpc_stream`
+- **My Home Assistant** — the integration uses OAuth2 via My HA. Ensure `https://my.home-assistant.io` is reachable from your instance.
 
----
+## Architecture
+
+- OAuth2 tokens (`ory_at_`) managed by HA's built-in OAuth2 flow
+- Platform tokens (`kk5fd5Ce`) obtained via password grant and refreshed automatically
+- gRPC bidirectional stream: `/DeviceConnect/Downstream` at `iot-streams-<region>-prod.dongcheng.ink:443`
+- Device status decoded from a 15-bit integer field (`split_bits()`)
+
+## Credits
+
+Based on [DCK-China/home-assistant-terraina](https://github.com/DCK-China/home-assistant-terraina) · Apache-2.0 licence
