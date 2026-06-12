@@ -45,7 +45,7 @@ async def async_setup_entry(
             model_name=device.get("modelName", "KDRM"),
             http_client=http_client,
         )
-        entity_map[sn] = entity
+        entity_map.setdefault(sn, []).append(entity)
         entities.append(entity)
     async_add_entities(entities)
 
@@ -102,13 +102,19 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity)
 
     def update_from_grpc(self, state_dict: dict) -> None:
         """Called by TerrainaGrpcStream with decoded device state."""
-        # Server sends: {'postDeviceDetail': {'info': {'status': N, 'power': N, ...}}}
         info: dict = {}
         if "postDeviceDetail" in state_dict:
+            # push notification: {'postDeviceDetail': {'info': {...}}}
             info = state_dict["postDeviceDetail"].get("info") or {}
+        elif "getDeviceDetail" in state_dict:
+            # poll response: {'getDeviceDetail': {'data': {'info': {...}}}}
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            info = data.get("info") or {}
 
         raw = info.get("status") or state_dict.get("status") or state_dict.get("workStatus")
         if raw is None:
+            # may still have getPath data — update attributes without state change
+            self._update_path_attrs(state_dict)
             return
         try:
             bits = split_bits(int(raw))
@@ -119,7 +125,7 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity)
         charging = bits.get("charging", "")
         power = info.get("power", 0)
 
-        if ws in ("mowing", "leaving basestation", "building graph"):
+        if ws in ("mowing", "leaving basestation", "building graph", "locating"):
             self._attr_activity = LawnMowerActivity.MOWING
         elif ws in ("backing", "backing with low power"):
             self._attr_activity = LawnMowerActivity.RETURNING
@@ -137,11 +143,38 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity)
         else:
             self._attr_activity = None
 
+        self._extra: dict = {
+            "working_status": ws,
+            "charging": charging,
+            "power": power,
+            "working_mode": info.get("manualModeType", 0),
+            "ai_height": info.get("aiHeight"),
+            "error_code": info.get("errorCode"),
+        }
+        self._update_path_attrs(state_dict)
+
         _LOGGER.debug(
             "gRPC state update for %s: ws=%r charging=%r power=%r → %s",
             self._sn, ws, charging, power, self._attr_activity,
         )
         self.async_write_ha_state()
+
+    def _update_path_attrs(self, state_dict: dict) -> None:
+        if "getPath" not in state_dict:
+            return
+        path = (state_dict["getPath"].get("data") or {})
+        extra = getattr(self, "_extra", {})
+        extra.update({
+            "progress": path.get("progress"),
+            "remain_time_min": path.get("remainTime"),
+            "total_area_sqm": path.get("totalArea"),
+            "position": path.get("local"),
+        })
+        self._extra = extra
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return getattr(self, "_extra", {})
 
     # ------------------------------------------------------------------
     # Commands — optimistic state update while gRPC state is unavailable

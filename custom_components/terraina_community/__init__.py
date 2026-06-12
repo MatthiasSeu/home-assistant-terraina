@@ -17,7 +17,7 @@ from .httpClient import TerrainaHttpClient
 from .platform_token import get_valid_app_token, is_app_token_valid, login_with_password
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["lawn_mower"]
+PLATFORMS = ["lawn_mower", "sensor"]
 
 _APP_TOKEN_CHECK_INTERVAL = timedelta(minutes=30)
 
@@ -82,7 +82,7 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: TerrainaCoordinator = data["coordinator"]
-    entity_map: dict[str, object] = data.get("entities", {})
+    entity_map: dict[str, list] = data.get("entities", {})
 
     region = entry.data.get("region", "eu")
 
@@ -110,8 +110,7 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
         sn = str(device["sn"])
 
         def _state_cb(state_dict, _sn=sn) -> None:
-            entity = entity_map.get(_sn)
-            if entity is not None:
+            for entity in entity_map.get(_sn, []):
                 entity.update_from_grpc(state_dict)
 
         stream = TerrainaGrpcStream(
