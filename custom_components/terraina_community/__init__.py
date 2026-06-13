@@ -129,7 +129,8 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
             entities = data.get("entities", {}).get(_sn, [])
             _LOGGER.debug("gRPC _state_cb for %s: %d entities, keys=%s", _sn, len(entities), list(state_dict.keys()))
             for entity in entities:
-                entity.update_from_grpc(state_dict)
+                if hasattr(entity, "update_from_grpc"):
+                    entity.update_from_grpc(state_dict)
 
         stream = TerrainaGrpcStream(
             grpc_host=grpc_host,

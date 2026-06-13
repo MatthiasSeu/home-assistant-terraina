@@ -61,6 +61,16 @@ def _query_state_msg(sn: str) -> platform_iot_streams_pb2.In:
     return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
 
 
+def _query_regions_msg(sn: str) -> platform_iot_streams_pb2.In:
+    msg_id = "ha-" + random_code()
+    svc_id = "ha-" + random_code()
+    msg = DeviceMessageWrapper()
+    msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
+        svc_id, "get", {"getRegions": None}
+    )
+    return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
+
+
 def _query_schedule_msg(sn: str) -> platform_iot_streams_pb2.In:
     msg_id = "ha-" + random_code()
     svc_id = "ha-" + random_code()
@@ -193,6 +203,7 @@ class TerrainaGrpcStream:
             await call.write(_heartbeat_msg(self._sn))
             await call.write(_query_state_msg(self._sn))
             await call.write(_query_schedule_msg(self._sn))
+            await call.write(_query_regions_msg(self._sn))
         except Exception:
             return
         tick = 0
@@ -248,7 +259,26 @@ class TerrainaGrpcStream:
                         )
                     device_active = not is_manual
             else:
-                _LOGGER.debug("gRPC msg type=%r sm=%r — no extractable state", msg.type, msg.sm)
+                inner = wrapper.get_proto()
+                prop_parts = []
+                for p in inner.properties:
+                    if p.stringValue:
+                        v = repr(p.stringValue[:80])
+                    elif p.intValue:
+                        v = str(p.intValue)
+                    elif p.doubleValue:
+                        v = str(p.doubleValue)
+                    else:
+                        v = "(empty)"
+                    prop_parts.append(f"{p.name}={v}")
+                _LOGGER.debug(
+                    "gRPC unknown msg type=%r sm=%r svc_name=%r events=%d props=[%s] | %s",
+                    msg.type, msg.sm,
+                    inner.services.name,
+                    len(inner.events),
+                    ", ".join(prop_parts),
+                    wrapper,
+                )
         except Exception:
             _LOGGER.debug("Failed to parse gRPC payload (type=%r sm=%r)", msg.type, msg.sm, exc_info=True)
         return device_active

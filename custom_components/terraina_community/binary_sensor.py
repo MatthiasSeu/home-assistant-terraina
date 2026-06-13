@@ -127,3 +127,6 @@ class TerrainaSafeToMowBinarySensor(
         self._rain_hold_until = rain_hold_until
         if self.hass:
             self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        """No-op — state is managed by SmartProtectionManager, not gRPC updates."""
