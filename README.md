@@ -1,6 +1,6 @@
 # TERRAINA Community Integration for Home Assistant
 
-Version: 1.3.0
+Version: 1.3.11
 
 A community fork of [DCK-China/home-assistant-terraina](https://github.com/DCK-China/home-assistant-terraina) with extended functionality.
 
@@ -15,12 +15,21 @@ A community fork of [DCK-China/home-assistant-terraina](https://github.com/DCK-C
 - **State restoration** — entities remember their last known state across HA restarts even when the mower is idle/docked
 - **Auto-relogin** — when the phone app invalidates the session, HA automatically re-authenticates using stored credentials
 - **DataUpdateCoordinator** polling every 30 s as fallback
+- **Smart Weather Protection** — `binary_sensor.<name>_safe_to_mow` computed from rain hold, weather forecast (hourly or daily with automatic fallback), and temperature threshold; configurable via Options dialog; auto-docks the mower when conditions become unsafe (optional)
 
 ## Supported devices
 
 TERRAINA / DCK KDRM210, KDRM220 (and compatible models using the DCK IoT platform).
 
 ## Installation
+
+### HACS (recommended)
+
+1. In HACS, go to **⋮ → Custom Repositories**.
+2. Add `https://github.com/MatthiasSeu/home-assistant-terraina` as an **Integration**.
+3. Search for **TERRAINA Community** and install it.
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & Services → Add Integration** and search for **TERRAINA Community**.
 
 ### Manual
 
@@ -56,16 +65,24 @@ The integration stores credentials securely in the HA config entry. If re-authen
 |--------|------|-------------|
 | `lawn_mower.<name>` | Lawn Mower | Mowing state + Start / Dock / Pause controls |
 | `sensor.<name>_battery` | Sensor | Battery level in % |
-| `sensor.<name>_cutting_height` | Sensor | AI cutting height level (raw device value) |
+| `sensor.<name>_cutting_height` | Sensor | Current AI cutting height (read from device) |
+| `number.<name>_cutting_height` | Number | Set cutting height via slider |
 | `select.<name>_working_mode` | Select | Working mode: `auto` / `manual` |
+| `switch.<name>_rain_sensor` | Switch | Enable / disable the device's built-in rain sensor |
+| `number.<name>_rain_delay` | Number | Device rain delay in hours (1–3 h) |
 | `sensor.<name>_schedule_monday` … `_schedule_sunday` | Sensor (×7) | Mowing time window(s) per weekday, e.g. `10:00 - 20:30`; supports multiple slots |
+| `switch.<name>_1_mon_enabled` … `7_sun_enabled` | Switch (×7) | Enable / disable mowing for each weekday |
+| `time.<name>_1_mon_start` / `1_mon_stop` … | Time (×14) | Start and stop time per weekday |
+| `sensor.<name>_error` | Sensor | Current error code, e.g. `E05 — Cutting motor error`; `None` when no error |
+| `sensor.<name>_rain_status` | Sensor | Rain detection state: `Dry`, `Raining`, or `Rain delay active` |
+| `binary_sensor.<name>_safe_to_mow` | Binary Sensor | `On` = conditions are safe to mow; `Off` = blocked by rain hold, forecast rain, or high temperature. Attributes expose all configured Smart Protection thresholds. |
 
 ### Lawn Mower states
 
 | HA state | Device condition |
 |----------|-----------------|
 | Mowing | Actively cutting, leaving base station, building map, or locating |
-| Returning | Returning to dock / low-power return |
+| Returning | Returning to dock / low-power return / completing manual task |
 | Paused | Resting / paused |
 | Docked | Hanging / charging / fully charged |
 | Error | Device error |
@@ -252,9 +269,71 @@ docker logs home-assistant 2>&1 | grep "working_mode\|Working mode"
 | "Unavailable" for old "Working Mode" sensor | Sensor entity was replaced by the Select entity | Go to **Settings → Entities**, search "Working Mode", delete the old sensor entity |
 | Re-authentication dialog | Session invalidated by phone app | Enter email + password again to restore the gRPC stream |
 | No state updates | gRPC stream not connected | Check logs: `docker logs home-assistant 2>&1 \| grep grpc_stream` |
-| Schedule not updating | Mower idle → server responds slowly | Wait 30 s after mower becomes active, or check debug logs |
+| Schedule sensors show "Unknown" | Mower in Manual mode | In Manual mode the server does not respond to `getSchedule`. Run the mower once in **Auto** mode — schedule sensors populate on the first Auto run |
+| Schedule not updating | Mower idle → server responds slowly | Wait 30 s after mower becomes active in Auto mode, or check debug logs |
 | `set_schedule_day` has no effect | Mower is in Manual mode | Switch Working Mode to `auto` first — schedule is ignored in manual mode |
 | `set_schedule_day` raises error "Cannot change the schedule while active" | Device rejects schedule changes mid-task | Dock the mower first, then update the schedule |
+
+---
+
+## Smart Weather Protection
+
+Configure via **Settings → Devices & Services → TERRAINA Community → Configure**:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Precipitation sensor | Entity ID of a daily precipitation sensor (mm) | — |
+| Base hold time (h) | Fixed hold added regardless of precipitation amount | 0 |
+| Factor (mm/step) | Precipitation per additional hour of hold | 5 mm |
+| Step size (h) | Hours added per factor block | 1 h |
+| Max HA hold (h) | Cap for the HA-managed hold (device hardware adds its own 1–3 h) | 24 h |
+| Forecast entity | Weather entity for rain-in-advance detection | — |
+| Forecast window (h) | Hours ahead to check for rain (1–12) | 2 h |
+| Temperature sensor | Outdoor temperature entity | — |
+| Max temperature (°C) | Dock the mower above this temperature | 32 °C |
+| Auto-dock when unsafe | Return to dock immediately when protection triggers | Off |
+
+### Rain hold formula
+
+```
+HA extra hold = base_hours + floor(precipitation_mm ÷ rain_factor_mm) × rain_hold_step_hours
+Total hold    = HA hold (capped at max) + device hardware delay (1–3 h, configured separately)
+```
+
+### `safe_to_mow` attributes
+
+All configured thresholds are visible as attributes on the `binary_sensor.<name>_safe_to_mow` entity — no need to open the Options dialog to check what values are active:
+
+```yaml
+blocked_reason: "Rain hold: 2h 14m remaining"
+rain_hold_until: "2026-06-11T16:45:00+00:00"
+precipitation_sensor: sensor.weatherstation_daily_rain
+rain_hold_base_hours: 0
+rain_factor_mm: 5
+rain_hold_step_hours: 1
+rain_hold_max_hours: 24
+forecast_entity: weather.forecast_weatherstation
+forecast_hours_ahead: 2
+temperature_sensor: sensor.outdoor_temperature
+max_temperature: 32
+auto_dock_unsafe: false
+```
+
+### Automation example — notify on protection change
+
+```yaml
+automation:
+  - alias: "Terraina — notify when mowing blocked"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.dck_kdrm210_safe_to_mow
+        to: "off"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Mowing blocked"
+          message: "{{ state_attr('binary_sensor.dck_kdrm210_safe_to_mow', 'blocked_reason') }}"
+```
 
 ---
 
@@ -264,13 +343,21 @@ docker logs home-assistant 2>&1 | grep "working_mode\|Working mode"
 HA config entry
   ├── TerrainaCoordinator      (REST polling, device list)
   ├── TerrainaHttpClient       (REST commands: start/dock/pause/set_mode/set_schedule)
-  └── TerrainaGrpcStream       (per device)
-        ├── heartbeat + getDeviceDetail every 30 s
-        ├── getSchedule every 5 min
-        └── _state_cb → entity.update_from_grpc()
-              ├── TerrainaLawnMower   (state, schedule attributes)
-              ├── TerrainaBatterySensor
-              └── TerrainarWorkingModeSelect
+  ├── TerrainaGrpcStream       (per device)
+  │     ├── heartbeat + getDeviceDetail every 30 s
+  │     ├── getSchedule every 5 min
+  │     └── _state_cb → entity.update_from_grpc()
+  │           ├── TerrainaLawnMower        (state, schedule attributes)
+  │           ├── TerrainaBatterySensor
+  │           ├── TerrainaWorkingModeSelect
+  │           ├── TerrainaRainSensorSwitch
+  │           ├── TerrainaRainDelayNumber
+  │           └── TerrainaCuttingHeightNumber
+  └── SmartProtectionManager   (per device)
+        ├── async_track_state_change_event (precipitation + temperature sensor)
+        ├── async_track_time_interval (every 10 min)
+        ├── weather.get_forecasts service call (hourly → daily fallback)
+        └── TerrainaSafeToMowBinarySensor.set_safe_state()
 ```
 
 - OAuth2 tokens (`ory_at_`) — managed by HA's built-in OAuth2 flow

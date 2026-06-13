@@ -71,7 +71,7 @@ class TerrainaScheduleTimeEntity(CoordinatorEntity[TerrainaCoordinator], TimeEnt
         self._is_end = is_end
         self._http_client = http_client
         self._entry = entry
-        kind = "End" if is_end else "Start"
+        kind = "Stop" if is_end else "Start"
         uid_kind = "end" if is_end else "start"
         self._attr_unique_id = f"{DOMAIN}_{sn}_schedule_{uid_kind}_{week}"
         self._attr_name = f"{device_name} {schedule_control_label(week)} {kind}"

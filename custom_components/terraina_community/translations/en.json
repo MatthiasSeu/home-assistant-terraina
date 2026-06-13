@@ -25,5 +25,25 @@
       "invalid_auth": "Invalid email or password. Please check your TERRAINA app credentials.",
       "unknown": "Unexpected error."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart Weather Protection",
+        "description": "## Rain Hold Formula\n\n`HA extra hold = base + floor(precipitation ÷ factor) × step`\n\nThe mower's built-in rain delay (1–3 h, set via the Rain Delay entity) runs in parallel. HA only extends protection *beyond* what the hardware can do.\n\n**Examples** with defaults (base=0 h, factor=5 mm, step=1 h, max=24 h):\n\n| Precipitation | HA extra hold | Hardware (3 h) | Total |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Tip:** Set base > 0 only if the mower's built-in rain sensor is disabled.\n\n---",
+        "data": {
+          "precipitation_sensor": "Precipitation sensor (entity_id)",
+          "rain_hold_base_hours": "Base hold (hours) — added regardless of rain amount; 0 = let hardware handle it",
+          "rain_factor_mm": "Factor (mm per step) — lower value = longer hold for light rain",
+          "rain_hold_step_hours": "Step size (hours per factor block) — higher value = steeper curve",
+          "rain_hold_max_hours": "Maximum HA-managed hold (hours) — hardware hold adds on top",
+          "forecast_entity": "Weather forecast entity (entity_id)",
+          "forecast_hours_ahead": "Forecast look-ahead (hours, 1–12) — block mowing if rain is forecast within this window",
+          "temperature_sensor": "Temperature sensor (entity_id)",
+          "max_temperature": "Max mowing temperature (°C) — mower docks above this threshold",
+          "auto_dock_unsafe": "Auto-dock mower when conditions are unsafe"
+        }
+      }
+    }
   }
 }

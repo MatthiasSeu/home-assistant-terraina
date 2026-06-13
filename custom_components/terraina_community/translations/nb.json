@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Velg region",
+        "data": {
+          "country": "Land"
+        }
+      },
+      "platform_auth": {
+        "title": "TERRAINA-plattform pålogging",
+        "description": "Skriv inn dine TERRAINA app-påloggingsdetaljer (samme e-post/passord som i mobilappen). Nødvendig for sanntids gRPC-enhetstilstandsstrøm.",
+        "data": {
+          "email": "E-postadresse",
+          "password": "Passord"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community er allerede konfigurert.",
+      "reauth_successful": "Autentisering på nytt var vellykket."
+    },
+    "error": {
+      "cannot_connect": "Kan ikke koble til TERRAINA-serveren.",
+      "invalid_auth": "Ugyldig e-post eller passord. Sjekk TERRAINA app-påloggingsdetaljene dine.",
+      "unknown": "Uventet feil."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Intelligent værbeskyttelse",
+        "description": "## Regnsperre-formel\n\n`HA ekstra tid = basis + floor(nedbør ÷ faktor) × steg`\n\nRobotens innebygde regnforsinkelse (1–3 t, justerbar via Regnforsinkelse-enheten) kjører parallelt. HA utvider bare beskyttelsen *utover hva maskinvaren kan gjøre*.\n\n**Eksempler** med standardverdier (basis=0 t, faktor=5 mm, steg=1 t, maks=24 t):\n\n| Nedbør | HA ekstra tid | Maskinvare (3 t) | Totalt |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 t** | 3 t | 4 t |\n| 20 mm | floor(20÷5)×1 = **4 t** | 3 t | 7 t |\n| 50 mm | floor(50÷5)×1 = **10 t** | 3 t | 13 t |\n\n**Tips:** Sett basis > 0 bare hvis robotens innebygde regnsensor er deaktivert.\n\n---",
+        "data": {
+          "precipitation_sensor": "Nedbørssensor (entity_id)",
+          "rain_hold_base_hours": "Basistid (timer) — lagt til uavhengig av nedbørsmengde; 0 = maskinvaren håndterer det",
+          "rain_factor_mm": "Faktor (mm per steg) — lavere verdi = lengre sperre ved lett regn",
+          "rain_hold_step_hours": "Stegstørrelse (timer per faktorblokk) — høyere = brattere kurve",
+          "rain_hold_max_hours": "Maksimal HA-styrt sperretid (timer) — maskinvaresperre legges til",
+          "forecast_entity": "Værvarslingsenhet (entity_id)",
+          "forecast_hours_ahead": "Prognose-forhåndsvisning (timer, 1–12) — blokker klipping hvis det er meldt regn innen dette vinduet",
+          "temperature_sensor": "Temperatursensor (entity_id)",
+          "max_temperature": "Maks. klippetemperatur (°C) — roboten returnerer over denne terskelen",
+          "auto_dock_unsafe": "Returner roboten automatisk til stasjon hvis forholdene er utrygge"
+        }
+      }
+    }
+  }
+}

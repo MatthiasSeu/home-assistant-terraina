@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Vyberte región",
+        "data": {
+          "country": "Krajina"
+        }
+      },
+      "platform_auth": {
+        "title": "Prihlásenie do platformy TERRAINA",
+        "description": "Zadajte prihlasovacie údaje aplikácie TERRAINA (rovnaký e-mail/heslo ako v mobilnej aplikácii). Potrebné pre stream stavu zariadenia v reálnom čase cez gRPC.",
+        "data": {
+          "email": "E-mailová adresa",
+          "password": "Heslo"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community je už nakonfigurované.",
+      "reauth_successful": "Opätovné overenie bolo úspešné."
+    },
+    "error": {
+      "cannot_connect": "Nedá sa pripojiť k serveru TERRAINA.",
+      "invalid_auth": "Neplatný e-mail alebo heslo. Skontrolujte prihlasovacie údaje aplikácie TERRAINA.",
+      "unknown": "Neočakávaná chyba."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Inteligentná ochrana počasím",
+        "description": "## Vzorec blokovania dažďom\n\n`HA extra čas = základ + floor(zrážky ÷ faktor) × krok`\n\nVstavaný dažďový senzor kosačky (1–3 h, nastaviteľný cez entitu Dažďové oneskorenie) beží paralelne. HA predlžuje ochranu len *nad rámec možností hardvéru*.\n\n**Príklady** s predvolenými hodnotami (základ=0 h, faktor=5 mm, krok=1 h, max=24 h):\n\n| Zrážky | HA extra čas | Hardvér (3 h) | Celkom |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Tip:** Základ nastavte > 0 len ak je vstavaný dažďový senzor kosačky deaktivovaný.\n\n---",
+        "data": {
+          "precipitation_sensor": "Senzor zrážok (entity_id)",
+          "rain_hold_base_hours": "Základný čas (hodiny) — pridaný bez ohľadu na množstvo zrážok; 0 = hardvér to zvládne",
+          "rain_factor_mm": "Faktor (mm na krok) — nižšia hodnota = dlhšie blokovanie pri miernom daždi",
+          "rain_hold_step_hours": "Veľkosť kroku (hodiny na blok faktora) — väčší = strmšia krivka",
+          "rain_hold_max_hours": "Maximálny čas blokovania HA (hodiny) — blokovanie hardvéru sa pripočítava",
+          "forecast_entity": "Entita predpovede počasia (entity_id)",
+          "forecast_hours_ahead": "Predstih predpovede (hodiny, 1–12) — blokovať kosenie ak je v tomto okne predpovedaný dážď",
+          "temperature_sensor": "Senzor teploty (entity_id)",
+          "max_temperature": "Maximálna teplota kosenia (°C) — kosačka sa vráti do stanice nad túto hranicu",
+          "auto_dock_unsafe": "Automaticky vrátiť kosačku do stanice pri nebezpečných podmienkach"
+        }
+      }
+    }
+  }
+}

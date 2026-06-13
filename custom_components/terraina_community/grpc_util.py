@@ -84,6 +84,42 @@ class MessageBuilder:
         )
         return msg.to_base64()
 
+    def build_set_rain_enable_payload(self, serial_number: str, enabled: int) -> str:
+        """Produce base64 payload for setRainEnable command (enabled: 0 or 1)."""
+        msg_id = self._HA_PREFIX + random_code()
+        service_id = self._HA_PREFIX + random_code()
+        msg = DeviceMessageWrapper()
+        msg.set_info(self._VERSION, msg_id, serial_number, utc_now_str()).set_service(
+            service_id,
+            "set",
+            {"setRainEnable": {"rainEnable": enabled}},
+        )
+        return msg.to_base64()
+
+    def build_set_rain_delay_payload(self, serial_number: str, minutes: int) -> str:
+        """Produce base64 payload for setRainDelay command (minutes: 60, 120, or 180)."""
+        msg_id = self._HA_PREFIX + random_code()
+        service_id = self._HA_PREFIX + random_code()
+        msg = DeviceMessageWrapper()
+        msg.set_info(self._VERSION, msg_id, serial_number, utc_now_str()).set_service(
+            service_id,
+            "set",
+            {"setRainDelay": {"rainDelay": minutes}},
+        )
+        return msg.to_base64()
+
+    def build_set_ai_height_payload(self, serial_number: str, height: int) -> str:
+        """Produce base64 payload for setAiHeight command (height in mm, EU: 30-80)."""
+        msg_id = self._HA_PREFIX + random_code()
+        service_id = self._HA_PREFIX + random_code()
+        msg = DeviceMessageWrapper()
+        msg.set_info(self._VERSION, msg_id, serial_number, utc_now_str()).set_service(
+            service_id,
+            "set",
+            {"setAiHeight": {"aiHeight": height}},
+        )
+        return msg.to_base64()
+
     def build_set_schedule_payload(
         self, serial_number: str, schedule_days: list[dict]
     ) -> str:

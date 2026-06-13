@@ -40,6 +40,10 @@ async def async_setup_entry(
         entity_map.setdefault(sn, []).append(select)
         entities.append(select)
 
+        rain_delay = TerrainaRainDelaySelect(coordinator, entry, sn, name, model, http_client)
+        entity_map.setdefault(sn, []).append(rain_delay)
+        entities.append(rain_delay)
+
     async_add_entities(entities)
 
 
@@ -120,5 +124,82 @@ class TerrainarWorkingModeSelect(CoordinatorEntity[TerrainaCoordinator], SelectE
     async def async_select_option(self, option: str) -> None:
         manual = 1 if option == "manual" else 0
         await self._http_client.set_work_mode(self._entry, self._sn, manual)
+        self._attr_current_option = option
+        self.async_write_ha_state()
+
+
+_RAIN_DELAY_OPTIONS = ["1h", "2h", "3h"]
+_RAIN_DELAY_MAP = {"1h": 60, "2h": 120, "3h": 180}
+_RAIN_DELAY_REVERSE = {v: k for k, v in _RAIN_DELAY_MAP.items()}
+
+
+class TerrainaRainDelaySelect(CoordinatorEntity[TerrainaCoordinator], SelectEntity, RestoreEntity):
+    """Select entity for rain delay (1h / 2h / 3h after onboard sensor detects dry)."""
+
+    _attr_options = _RAIN_DELAY_OPTIONS
+    _attr_icon = "mdi:timer-sand"
+
+    def __init__(
+        self,
+        coordinator: TerrainaCoordinator,
+        entry: ConfigEntry,
+        sn: str,
+        device_name: str,
+        model_name: str,
+        http_client: TerrainaHttpClient,
+    ) -> None:
+        super().__init__(coordinator)
+        self._sn = sn
+        self._device_name = device_name
+        self._model_name = model_name
+        self._http_client = http_client
+        self._entry = entry
+        self._attr_unique_id = f"{DOMAIN}_{sn}_rain_delay"
+        self._attr_name = f"{device_name} Rain Delay"
+        self._attr_current_option: str | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._sn)},
+            name=self._device_name,
+            model=self._model_name.upper(),
+            manufacturer="DCK / TERRAINA",
+            serial_number=self._sn,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            if last.state in _RAIN_DELAY_OPTIONS:
+                self._attr_current_option = last.state
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        settings: dict = {}
+        if "getDeviceDetail" in state_dict:
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            settings = data.get("settings") or {}
+        elif "postDeviceDetail" in state_dict:
+            settings = state_dict["postDeviceDetail"].get("settings") or {}
+        else:
+            return
+        val = settings.get("rainDelay")
+        if val is None:
+            return
+        option = _RAIN_DELAY_REVERSE.get(int(val))
+        if option is None:
+            _LOGGER.warning("Unknown rainDelay value %s for %s", val, self._sn)
+            return
+        self._attr_current_option = option
+        _LOGGER.debug("Rain delay for %s: %s (%s min)", self._sn, option, val)
+        self.async_write_ha_state()
+
+    async def async_select_option(self, option: str) -> None:
+        minutes = _RAIN_DELAY_MAP[option]
+        await self._http_client.set_rain_delay(self._entry, self._sn, minutes)
         self._attr_current_option = option
         self.async_write_ha_state()

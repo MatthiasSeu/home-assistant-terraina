@@ -16,12 +16,20 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, ERROR_CODES
 from .coordinator import TerrainaCoordinator
+from .grpc_util import split_bits
 
 _LOGGER = logging.getLogger(__name__)
 
 _POWER_TO_PCT = {0: 0, 1: 25, 2: 50, 3: 75, 4: 100}
+
+# Maps the rained bit-field string to a user-friendly HA state
+_RAIN_STATE = {
+    "not rained":              "Dry",
+    "being rained":            "Raining",
+    "being rained and delayed": "Rain delay active",
+}
 
 # Protocol: 0=Sun, 1=Mon, …, 6=Sat.  Display order: Mon first.
 _WEEKDAY_NAMES = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
@@ -67,6 +75,14 @@ async def async_setup_entry(
         height = TerrainaCuttingHeightSensor(coordinator, entry, sn, name, model)
         entity_map.setdefault(sn, []).append(height)
         entities.append(height)
+
+        error = TerrainaErrorSensor(coordinator, entry, sn, name, model)
+        entity_map.setdefault(sn, []).append(error)
+        entities.append(error)
+
+        rain = TerrainaRainSensor(coordinator, entry, sn, name, model)
+        entity_map.setdefault(sn, []).append(rain)
+        entities.append(rain)
 
         # Create one sensor per weekday, Monday first
         for week in _WEEK_DISPLAY_ORDER:
@@ -140,10 +156,15 @@ class TerrainaBatterySensor(CoordinatorEntity[TerrainaCoordinator], RestoreSenso
 
 
 class TerrainaCuttingHeightSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
-    """Sensor showing the current AI cutting height level."""
+    """Sensor showing the current cutting height in mm.
+
+    aiHeight lives in getDeviceDetail.data.settings (not in .info).
+    postDeviceDetail only carries rainEnable/rainDelay in its settings block.
+    """
 
     _attr_icon = "mdi:ruler"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "mm"
 
     def __init__(
         self,
@@ -175,20 +196,20 @@ class TerrainaCuttingHeightSensor(CoordinatorEntity[TerrainaCoordinator], Restor
         self.async_write_ha_state()
 
     def update_from_grpc(self, state_dict: dict) -> None:
-        info: dict = {}
-        if "postDeviceDetail" in state_dict:
-            info = state_dict["postDeviceDetail"].get("info") or {}
-        elif "getDeviceDetail" in state_dict:
+        settings: dict = {}
+        if "getDeviceDetail" in state_dict:
             data = state_dict["getDeviceDetail"].get("data") or {}
-            info = data.get("info") or {}
+            settings = data.get("settings") or {}
+        elif "postDeviceDetail" in state_dict:
+            settings = state_dict["postDeviceDetail"].get("settings") or {}
         else:
             return
 
-        height = info.get("aiHeight")
+        height = settings.get("aiHeight")
         if height is None:
             return
         self._attr_native_value = int(height)
-        _LOGGER.debug("Cutting height for %s: %s", self._sn, height)
+        _LOGGER.debug("Cutting height for %s: %s mm", self._sn, height)
         self.async_write_ha_state()
 
 
@@ -290,4 +311,145 @@ class TerrainaScheduleSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSens
             self._sn, self._week, _WEEKDAY_NAMES[self._week],  # type: ignore[index]
             len(self._slots), self._attr_native_value,
         )
+        self.async_write_ha_state()
+
+
+class TerrainaErrorSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
+    """Sensor showing the current error code with human-readable description.
+
+    State is None when no error is active (errorCode 0 or absent).
+    State is 'E05 — Cutting motor error' when an error is present.
+    """
+
+    _attr_icon = "mdi:check-circle-outline"
+
+    def __init__(
+        self,
+        coordinator: TerrainaCoordinator,
+        entry: ConfigEntry,
+        sn: str,
+        device_name: str,
+        model_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._sn = sn
+        self._device_name = device_name
+        self._model_name = model_name
+        self._attr_unique_id = f"{DOMAIN}_{sn}_error_code"
+        self._attr_name = f"{device_name} Error"
+        self._attr_native_value: str | None = None
+        self._has_error = False
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _device_info(self._sn, self._device_name, self._model_name)
+
+    @property
+    def icon(self) -> str:
+        return "mdi:alert-circle" if self._has_error else "mdi:check-circle-outline"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()) is not None:
+            self._attr_native_value = last.native_value
+            self._has_error = (
+                self._attr_native_value is not None
+                and self._attr_native_value != "OK"
+            )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        info: dict = {}
+        if "postDeviceDetail" in state_dict:
+            info = state_dict["postDeviceDetail"].get("info") or {}
+        elif "getDeviceDetail" in state_dict:
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            info = data.get("info") or {}
+        else:
+            return
+
+        raw = info.get("errorCode")
+        if raw is None:
+            return
+
+        try:
+            code = int(raw)
+        except (TypeError, ValueError):
+            return
+
+        if code == 0:
+            self._has_error = False
+            self._attr_native_value = "OK"
+        else:
+            self._has_error = True
+            desc = ERROR_CODES.get(code, "Unknown error")
+            self._attr_native_value = f"E{code:02d} — {desc}"
+
+        _LOGGER.debug("Error code for %s: %r → %s", self._sn, code, self._attr_native_value)
+        self.async_write_ha_state()
+
+
+class TerrainaRainSensor(CoordinatorEntity[TerrainaCoordinator], RestoreSensor):
+    """Sensor showing the current rain detection state.
+
+    Decoded from bits 4-5 of the device status integer (same field as working_status).
+    States: 'Dry', 'Raining', 'Rain delay active'.
+    """
+
+    _attr_icon = "mdi:weather-rainy"
+
+    def __init__(
+        self,
+        coordinator: TerrainaCoordinator,
+        entry: ConfigEntry,
+        sn: str,
+        device_name: str,
+        model_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._sn = sn
+        self._device_name = device_name
+        self._model_name = model_name
+        self._attr_unique_id = f"{DOMAIN}_{sn}_rain_status"
+        self._attr_name = f"{device_name} Rain Status"
+        self._attr_native_value: str | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _device_info(self._sn, self._device_name, self._model_name)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()) is not None:
+            self._attr_native_value = last.native_value
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        info: dict = {}
+        if "postDeviceDetail" in state_dict:
+            info = state_dict["postDeviceDetail"].get("info") or {}
+        elif "getDeviceDetail" in state_dict:
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            info = data.get("info") or {}
+        else:
+            return
+
+        raw = info.get("status")
+        if raw is None:
+            return
+
+        try:
+            bits = split_bits(int(raw))
+        except (TypeError, ValueError):
+            return
+
+        rained = bits.get("rained", "")
+        self._attr_native_value = _RAIN_STATE.get(rained, rained) or None
+        _LOGGER.debug("Rain status for %s: %r → %s", self._sn, rained, self._attr_native_value)
         self.async_write_ha_state()

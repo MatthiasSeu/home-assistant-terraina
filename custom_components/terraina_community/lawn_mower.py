@@ -145,7 +145,7 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
 
         if ws in ("mowing", "leaving basestation", "building graph", "locating"):
             self._attr_activity = LawnMowerActivity.MOWING
-        elif ws in ("backing", "backing with low power"):
+        elif ws in ("backing", "backing with low power", "completing"):
             self._attr_activity = LawnMowerActivity.RETURNING
         elif ws == "resting":
             self._attr_activity = LawnMowerActivity.PAUSED

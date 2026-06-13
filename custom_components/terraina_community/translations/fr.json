@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Sélectionner la région",
+        "data": {
+          "country": "Pays"
+        }
+      },
+      "platform_auth": {
+        "title": "Connexion à la plateforme TERRAINA",
+        "description": "Entrez vos identifiants de l'application TERRAINA (même e-mail/mot de passe que l'appli mobile). Requis pour le flux d'état en temps réel via gRPC.",
+        "data": {
+          "email": "Adresse e-mail",
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community est déjà configuré.",
+      "reauth_successful": "Ré-authentification réussie."
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter au serveur TERRAINA.",
+      "invalid_auth": "E-mail ou mot de passe invalide. Veuillez vérifier vos identifiants TERRAINA.",
+      "unknown": "Erreur inattendue."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Protection météo intelligente",
+        "description": "## Formule de blocage pluie\n\n`Temps extra HA = base + floor(précipitations ÷ facteur) × pas`\n\nLe délai pluie intégré de la tondeuse (1–3 h, réglable via l'entité Délai pluie) fonctionne en parallèle. HA prolonge la protection uniquement *au-delà des capacités du matériel*.\n\n**Exemples** avec valeurs par défaut (base=0 h, facteur=5 mm, pas=1 h, max=24 h):\n\n| Précipitations | Temps extra HA | Matériel (3 h) | Total |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Astuce :** Mettre base > 0 uniquement si le capteur de pluie intégré est désactivé.\n\n---",
+        "data": {
+          "precipitation_sensor": "Capteur de précipitations (entity_id)",
+          "rain_hold_base_hours": "Temps de base (heures) — indépendant des précipitations ; 0 = géré par le matériel",
+          "rain_factor_mm": "Facteur (mm par pas) — valeur faible = blocage plus long par pluie légère",
+          "rain_hold_step_hours": "Taille du pas (heures par bloc de facteur) — plus grand = courbe plus raide",
+          "rain_hold_max_hours": "Durée maximale gérée par HA (heures) — s'ajoute au blocage matériel",
+          "forecast_entity": "Entité météo prévision (entity_id)",
+          "forecast_hours_ahead": "Prévision en avance (heures, 1–12) — bloquer la tonte si la pluie est prévue dans cette fenêtre",
+          "temperature_sensor": "Capteur de température (entity_id)",
+          "max_temperature": "Température max. de tonte (°C) — la tondeuse rentre au-dessus de ce seuil",
+          "auto_dock_unsafe": "Rentrer automatiquement la tondeuse si les conditions sont dangereuses"
+        }
+      }
+    }
+  }
+}

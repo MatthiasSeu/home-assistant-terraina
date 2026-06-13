@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Seleziona regione",
+        "data": {
+          "country": "Paese"
+        }
+      },
+      "platform_auth": {
+        "title": "Accesso alla piattaforma TERRAINA",
+        "description": "Inserisci le credenziali dell'app TERRAINA (stessa e-mail/password dell'app mobile). Necessario per il flusso di stato in tempo reale via gRPC.",
+        "data": {
+          "email": "Indirizzo e-mail",
+          "password": "Password"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community è già configurato.",
+      "reauth_successful": "Riautenticazione riuscita."
+    },
+    "error": {
+      "cannot_connect": "Impossibile connettersi al server TERRAINA.",
+      "invalid_auth": "E-mail o password non validi. Controlla le credenziali dell'app TERRAINA.",
+      "unknown": "Errore imprevisto."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Protezione meteo intelligente",
+        "description": "## Formula di blocco pioggia\n\n`Tempo extra HA = base + floor(precipitazioni ÷ fattore) × passo`\n\nIl ritardo pioggia integrato del robot (1–3 h, impostabile tramite l'entità Ritardo pioggia) funziona in parallelo. HA estende la protezione solo *oltre le capacità dell'hardware*.\n\n**Esempi** con valori predefiniti (base=0 h, fattore=5 mm, passo=1 h, max=24 h):\n\n| Precipitazioni | Tempo extra HA | Hardware (3 h) | Totale |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Suggerimento:** Impostare base > 0 solo se il sensore pioggia integrato è disabilitato.\n\n---",
+        "data": {
+          "precipitation_sensor": "Sensore precipitazioni (entity_id)",
+          "rain_hold_base_hours": "Tempo base (ore) — aggiunto indipendentemente dalle precipitazioni; 0 = gestito dall'hardware",
+          "rain_factor_mm": "Fattore (mm per passo) — valore basso = blocco più lungo per pioggia leggera",
+          "rain_hold_step_hours": "Dimensione passo (ore per blocco fattore) — più alto = curva più ripida",
+          "rain_hold_max_hours": "Blocco massimo gestito da HA (ore) — si aggiunge al blocco hardware",
+          "forecast_entity": "Entità previsione meteo (entity_id)",
+          "forecast_hours_ahead": "Anticipo previsione (ore, 1–12) — blocca il taglio se è prevista pioggia entro questa finestra",
+          "temperature_sensor": "Sensore temperatura (entity_id)",
+          "max_temperature": "Temperatura massima di taglio (°C) — il robot rientra sopra questa soglia",
+          "auto_dock_unsafe": "Rientra automaticamente il robot se le condizioni sono pericolose"
+        }
+      }
+    }
+  }
+}

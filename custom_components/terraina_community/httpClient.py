@@ -104,6 +104,27 @@ class TerrainaHttpClient:
         payload_b64 = self._message_builder.build_set_schedule_payload(sn, schedule_days)
         await self._send_message(config_entry, sn, payload_b64)
 
+    async def set_rain_enable(
+        self, config_entry: ConfigEntry, sn: str, enabled: int
+    ) -> None:
+        """Send setRainEnable command (enabled: 0 or 1)."""
+        payload_b64 = self._message_builder.build_set_rain_enable_payload(sn, enabled)
+        await self._send_message(config_entry, sn, payload_b64)
+
+    async def set_rain_delay(
+        self, config_entry: ConfigEntry, sn: str, minutes: int
+    ) -> None:
+        """Send setRainDelay command (minutes: 60, 120, or 180)."""
+        payload_b64 = self._message_builder.build_set_rain_delay_payload(sn, minutes)
+        await self._send_message(config_entry, sn, payload_b64)
+
+    async def set_ai_height(
+        self, config_entry: ConfigEntry, sn: str, height: int
+    ) -> None:
+        """Send setAiHeight command (height in mm, EU: 30-80)."""
+        payload_b64 = self._message_builder.build_set_ai_height_payload(sn, height)
+        await self._send_message(config_entry, sn, payload_b64)
+
     async def go_home(self, config_entry: ConfigEntry, serial_number: str) -> None:
         """Send the mower back to its charging station (backing = index 4)."""
         from .const import WORKING_STATUS

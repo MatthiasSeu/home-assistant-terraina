@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Régió kiválasztása",
+        "data": {
+          "country": "Ország"
+        }
+      },
+      "platform_auth": {
+        "title": "TERRAINA platform bejelentkezés",
+        "description": "Add meg a TERRAINA app bejelentkezési adataidat (ugyanaz az e-mail/jelszó mint a mobilalkalmazásban). Szükséges a valós idejű gRPC eszközállapot-streamhez.",
+        "data": {
+          "email": "E-mail cím",
+          "password": "Jelszó"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "A TERRAINA Community már be van állítva.",
+      "reauth_successful": "Az újrahitelesítés sikeres volt."
+    },
+    "error": {
+      "cannot_connect": "Nem sikerült csatlakozni a TERRAINA szerverhez.",
+      "invalid_auth": "Érvénytelen e-mail vagy jelszó. Kérjük ellenőrizd a TERRAINA app adatait.",
+      "unknown": "Váratlan hiba."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Intelligens időjárási védelem",
+        "description": "## Esőzár képlet\n\n`HA extra idő = alap + floor(csapadék ÷ faktor) × lépés`\n\nA fűnyíró beépített esőkésleltetője (1–3 ó, az Esőkésleltetés entitáson állítható) párhuzamosan fut. A HA csak a *hardver képességein túl* nyújtja a védelmet.\n\n**Példák** alapértékekkel (alap=0 ó, faktor=5 mm, lépés=1 ó, max=24 ó):\n\n| Csapadék | HA extra idő | Hardver (3 ó) | Összesen |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 ó** | 3 ó | 4 ó |\n| 20 mm | floor(20÷5)×1 = **4 ó** | 3 ó | 7 ó |\n| 50 mm | floor(50÷5)×1 = **10 ó** | 3 ó | 13 ó |\n\n**Tipp:** Az alapot csak akkor állítsd 0-nál nagyobbra, ha a fűnyíró beépített esőérzékelője ki van kapcsolva.\n\n---",
+        "data": {
+          "precipitation_sensor": "Csapadékmérő szenzor (entity_id)",
+          "rain_hold_base_hours": "Alapidő (óra) — csapadékmennyiségtől függetlenül; 0 = a hardver kezeli",
+          "rain_factor_mm": "Faktor (mm lépésenként) — kisebb érték = hosszabb zár enyhe esőnél",
+          "rain_hold_step_hours": "Lépésméret (óra faktor blokkonként) — nagyobb = meredekebb görbe",
+          "rain_hold_max_hours": "HA által kezelt maximális záridő (óra) — hardver zár hozzáadódik",
+          "forecast_entity": "Időjárás-előrejelzés entitás (entity_id)",
+          "forecast_hours_ahead": "Előrejelzési előnézet (óra, 1–12) — blokkolja a nyírást ha ezen az időablakon belül esőt jósolnak",
+          "temperature_sensor": "Hőmérséklet szenzor (entity_id)",
+          "max_temperature": "Maximális nyírási hőmérséklet (°C) — e küszöb felett a fűnyíró visszadokkolva",
+          "auto_dock_unsafe": "Automatikus visszaállás a dokkolóba, ha a körülmények nem biztonságosak"
+        }
+      }
+    }
+  }
+}

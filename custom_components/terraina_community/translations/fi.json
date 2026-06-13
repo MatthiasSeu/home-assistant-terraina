@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Valitse alue",
+        "data": {
+          "country": "Maa"
+        }
+      },
+      "platform_auth": {
+        "title": "TERRAINA-alustan kirjautuminen",
+        "description": "Anna TERRAINA-sovelluksen kirjautumistiedot (sama sähköposti/salasana kuin mobiilisovelluksessa). Tarvitaan reaaliaikaiseen gRPC-laitteen tilavirtaukseen.",
+        "data": {
+          "email": "Sähköpostiosoite",
+          "password": "Salasana"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community on jo määritetty.",
+      "reauth_successful": "Uudelleentodennus onnistui."
+    },
+    "error": {
+      "cannot_connect": "Ei voi muodostaa yhteyttä TERRAINA-palvelimeen.",
+      "invalid_auth": "Virheellinen sähköposti tai salasana. Tarkista TERRAINA-sovelluksen kirjautumistiedot.",
+      "unknown": "Odottamaton virhe."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Älykäs säänsuojaus",
+        "description": "## Sadesulku-kaava\n\n`HA lisäaika = pohja + floor(sadanta ÷ kerroin) × askel`\n\nRobotin sisäinen sadeviiväste (1–3 h, säädettävissä Sadeviiväste-entiteetin kautta) toimii rinnakkain. HA pidentää suojausta vain *laitteiston kapasiteetin ylittävältä osin*.\n\n**Esimerkkejä** oletusarvoilla (pohja=0 h, kerroin=5 mm, askel=1 h, maks=24 h):\n\n| Sadanta | HA lisäaika | Laitteisto (3 h) | Yhteensä |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Vinkki:** Aseta pohja > 0 vain jos robotin sisäinen sadetunnistin on poistettu käytöstä.\n\n---",
+        "data": {
+          "precipitation_sensor": "Sadetunnistin (entity_id)",
+          "rain_hold_base_hours": "Pohja-aika (tuntia) — lisätään sademäärästä riippumatta; 0 = laitteisto hoitaa",
+          "rain_factor_mm": "Kerroin (mm per askel) — pienempi arvo = pidempi sulku kevyellä sateella",
+          "rain_hold_step_hours": "Askelkoko (tuntia per kerroinlohko) — suurempi = jyrkempi käyrä",
+          "rain_hold_max_hours": "HA:n hallitsema enimmäissulkuaika (tuntia) — laitteistosulku lisätään päälle",
+          "forecast_entity": "Sääennuste-entiteetti (entity_id)",
+          "forecast_hours_ahead": "Ennusteen ennakkoaika (tuntia, 1–12) — estä leikkaus jos sade on ennustettu tässä ikkunassa",
+          "temperature_sensor": "Lämpötila-anturi (entity_id)",
+          "max_temperature": "Enimmäisleikkauslämpötila (°C) — robotti palaa tämän kynnysarvon ylittyessä",
+          "auto_dock_unsafe": "Palauta robotti automaattisesti asemalle vaarallisissa olosuhteissa"
+        }
+      }
+    }
+  }
+}

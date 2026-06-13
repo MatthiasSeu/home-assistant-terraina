@@ -236,9 +236,17 @@ class TerrainaGrpcStream:
             if state:
                 _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
-                # Signal active push so caller can trigger on-demand queries
                 if "postDeviceDetail" in state:
-                    device_active = True
+                    info = state["postDeviceDetail"].get("info") or {}
+                    try:
+                        is_manual = bool((int(info.get("status", 0)) >> 13) & 1)
+                    except (TypeError, ValueError):
+                        is_manual = False
+                    if is_manual:
+                        _LOGGER.debug(
+                            "gRPC: mower %s is in manual mode — getSchedule skipped", self._sn
+                        )
+                    device_active = not is_manual
             else:
                 _LOGGER.debug("gRPC msg type=%r sm=%r — no extractable state", msg.type, msg.sm)
         except Exception:

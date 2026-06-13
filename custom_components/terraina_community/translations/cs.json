@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TERRAINA Community — Vyberte region",
+        "data": {
+          "country": "Země"
+        }
+      },
+      "platform_auth": {
+        "title": "Přihlášení k platformě TERRAINA",
+        "description": "Zadejte přihlašovací údaje aplikace TERRAINA (stejný e-mail/heslo jako v mobilní aplikaci). Nutné pro stream stavu zařízení v reálném čase přes gRPC.",
+        "data": {
+          "email": "E-mailová adresa",
+          "password": "Heslo"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "TERRAINA Community je již nakonfigurováno.",
+      "reauth_successful": "Opětovné ověření bylo úspěšné."
+    },
+    "error": {
+      "cannot_connect": "Nelze se připojit k serveru TERRAINA.",
+      "invalid_auth": "Neplatný e-mail nebo heslo. Zkontrolujte prosím přihlašovací údaje aplikace TERRAINA.",
+      "unknown": "Neočekávaná chyba."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Inteligentní ochrana počasím",
+        "description": "## Vzorec blokování deštěm\n\n`HA extra čas = základ + floor(srážky ÷ faktor) × krok`\n\nVestavěné zpoždění deště sekačky (1–3 h, nastavitelné přes entitu Zpoždění deště) běží paralelně. HA prodlužuje ochranu pouze *nad rámec možností hardwaru*.\n\n**Příklady** s výchozími hodnotami (základ=0 h, faktor=5 mm, krok=1 h, max=24 h):\n\n| Srážky | HA extra čas | Hardware (3 h) | Celkem |\n|---|---|---|---|\n| 5 mm | floor(5÷5)×1 = **1 h** | 3 h | 4 h |\n| 20 mm | floor(20÷5)×1 = **4 h** | 3 h | 7 h |\n| 50 mm | floor(50÷5)×1 = **10 h** | 3 h | 13 h |\n\n**Tip:** Základ nastavte > 0 pouze pokud je vestavěný dešťový senzor sekačky deaktivován.\n\n---",
+        "data": {
+          "precipitation_sensor": "Srážkový senzor (entity_id)",
+          "rain_hold_base_hours": "Základní čas (hodiny) — přidán bez ohledu na množství srážek; 0 = hardware to zvládne",
+          "rain_factor_mm": "Faktor (mm na krok) — nižší hodnota = delší blokování při lehkém dešti",
+          "rain_hold_step_hours": "Velikost kroku (hodiny na blok faktoru) — vyšší = strmější křivka",
+          "rain_hold_max_hours": "Maximální čas blokování HA (hodiny) — blokování hardwaru se přičítá",
+          "forecast_entity": "Entita předpovědi počasí (entity_id)",
+          "forecast_hours_ahead": "Předstih předpovědi (hodiny, 1–12) — blokovat sekání pokud je v tomto okně předpovídán déšť",
+          "temperature_sensor": "Senzor teploty (entity_id)",
+          "max_temperature": "Maximální teplota pro sekání (°C) — sekačka se vrátí do stanice nad tuto hranici",
+          "auto_dock_unsafe": "Automaticky vrátit sekačku do stanice při nebezpečných podmínkách"
+        }
+      }
+    }
+  }
+}

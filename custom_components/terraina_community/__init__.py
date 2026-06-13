@@ -20,13 +20,18 @@ from .httpClient import TerrainaHttpClient
 from .platform_token import get_valid_app_token, is_app_token_valid, login_with_password
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["lawn_mower", "sensor", "select", "switch", "time"]
+PLATFORMS = ["lawn_mower", "sensor", "select", "switch", "time", "number", "binary_sensor"]
 
 _APP_TOKEN_CHECK_INTERVAL = timedelta(minutes=30)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TERRAINA Community from a config entry."""
+    from homeassistant.loader import async_get_integration
+    integration = await async_get_integration(hass, DOMAIN)
+    _version = integration.manifest.get("version", "?")
+    _LOGGER.info("TERRAINA Community v%s starting", _version)
+
     region = entry.data.get("region", "eu")
     session = async_get_clientsession(hass)
 
@@ -43,11 +48,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "http_client": http_client,
         "grpc_streams": {},
+        "_last_options": dict(entry.options),
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _register_services(hass)
+
+    # Reload integration when options change (ensures SmartProtectionManager picks up new sensors)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    # Smart protection (rain hold, temperature, forecast) — started after platforms are set up
+    hass.async_create_task(_start_smart_protection(hass, entry))
 
     # Start gRPC streams if we have an app_token
     if entry.data.get("app_token"):
@@ -130,6 +142,62 @@ async def _start_grpc_streams(hass: HomeAssistant, entry: ConfigEntry) -> None:
         stream.start()
         data["grpc_streams"][sn] = stream
         _LOGGER.debug("gRPC stream started for device %s", sn)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload only when options actually changed — ignore token-refresh data updates."""
+    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    if entry_data.get("_last_options") == dict(entry.options):
+        return
+    entry_data["_last_options"] = dict(entry.options)
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def _start_smart_protection(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Start SmartProtectionManager for each device after all platforms are set up."""
+    import asyncio
+    from .smart_protection import SmartProtectionManager
+
+    # Yield once so entity async_added_to_hass calls complete (restoring rain_hold_until)
+    await asyncio.sleep(0)
+
+    data = hass.data[DOMAIN].get(entry.entry_id)
+    if not data:
+        return
+
+    coordinator: TerrainaCoordinator = data["coordinator"]
+    http_client = data["http_client"]
+
+    for device in coordinator.data or []:
+        sn = str(device["sn"])
+
+        safe_sensor = data.get("safe_to_mow_sensors", {}).get(sn)
+
+        def _on_protection_update(
+            safe: bool, reason: str, hold_until, _sn=sn, _sensor=safe_sensor
+        ) -> None:
+            if _sensor:
+                _sensor.set_safe_state(safe, reason, hold_until)
+
+            if not safe and entry.options.get("auto_dock_unsafe", False):
+                from .lawn_mower import TerrainaLawnMower
+                from homeassistant.components.lawn_mower import LawnMowerActivity
+
+                entities = data.get("entities", {}).get(_sn, [])
+                mower = next(
+                    (e for e in entities if isinstance(e, TerrainaLawnMower)), None
+                )
+                if mower and mower._attr_activity == LawnMowerActivity.MOWING:
+                    hass.async_create_task(http_client.go_home(entry, _sn))
+                    _LOGGER.info("Auto-dock triggered for %s: %s", _sn, reason)
+
+        manager = SmartProtectionManager(hass, entry, _on_protection_update)
+
+        if safe_sensor and safe_sensor._rain_hold_until:
+            manager.restore(safe_sensor._rain_hold_until)
+
+        manager.start()
+        data.setdefault("protection_managers", {})[sn] = manager
 
 
 _SET_SCHEDULE_SCHEMA = vol.Schema(
@@ -240,6 +308,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = hass.data[DOMAIN].get(entry.entry_id, {})
     for stream in data.get("grpc_streams", {}).values():
         stream.stop()
+    for manager in data.get("protection_managers", {}).values():
+        manager.stop()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:

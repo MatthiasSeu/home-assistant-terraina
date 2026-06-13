@@ -41,6 +41,10 @@ async def async_setup_entry(
             entity_map.setdefault(sn, []).append(sw)
             entities.append(sw)
 
+        rain_sw = TerrainaRainEnableSwitch(coordinator, entry, sn, name, model, http_client)
+        entity_map.setdefault(sn, []).append(rain_sw)
+        entities.append(rain_sw)
+
     async_add_entities(entities)
 
 
@@ -126,6 +130,73 @@ class TerrainaScheduleSwitch(CoordinatorEntity[TerrainaCoordinator], SwitchEntit
         if mower:
             mower._schedule = updated
         self._attr_is_on = enabled
+        self.async_write_ha_state()
+
+
+class TerrainaRainEnableSwitch(CoordinatorEntity[TerrainaCoordinator], SwitchEntity, RestoreEntity):
+    """Switch to enable/disable the mower's onboard rain sensor."""
+
+    _attr_icon = "mdi:weather-rainy"
+
+    def __init__(
+        self,
+        coordinator: TerrainaCoordinator,
+        entry: ConfigEntry,
+        sn: str,
+        device_name: str,
+        model_name: str,
+        http_client: TerrainaHttpClient,
+    ) -> None:
+        super().__init__(coordinator)
+        self._sn = sn
+        self._device_name = device_name
+        self._model_name = model_name
+        self._http_client = http_client
+        self._entry = entry
+        self._attr_unique_id = f"{DOMAIN}_{sn}_rain_enable"
+        self._attr_name = f"{device_name} Rain Sensor"
+        self._attr_is_on: bool | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _device_info(self._sn, self._device_name, self._model_name)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            if last.state == "on":
+                self._attr_is_on = True
+            elif last.state == "off":
+                self._attr_is_on = False
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def update_from_grpc(self, state_dict: dict) -> None:
+        settings: dict = {}
+        if "getDeviceDetail" in state_dict:
+            data = state_dict["getDeviceDetail"].get("data") or {}
+            settings = data.get("settings") or {}
+        elif "postDeviceDetail" in state_dict:
+            settings = state_dict["postDeviceDetail"].get("settings") or {}
+        else:
+            return
+        val = settings.get("rainEnable")
+        if val is None:
+            return
+        self._attr_is_on = bool(int(val))
+        _LOGGER.debug("Rain enable for %s: %s", self._sn, self._attr_is_on)
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._http_client.set_rain_enable(self._entry, self._sn, 1)
+        self._attr_is_on = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._http_client.set_rain_enable(self._entry, self._sn, 0)
+        self._attr_is_on = False
         self.async_write_ha_state()
 
 

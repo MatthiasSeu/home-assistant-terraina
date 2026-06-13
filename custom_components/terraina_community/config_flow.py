@@ -9,6 +9,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -125,6 +126,11 @@ class TerrainaCommunityConfigFlow(
             errors=errors,
         )
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> "TerrainaOptionsFlow":
+        return TerrainaOptionsFlow()
+
     async def async_step_reauth(
         self, user_input: Mapping[str, Any]
     ) -> config_entries.ConfigFlowResult:
@@ -142,3 +148,67 @@ class TerrainaCommunityConfigFlow(
             ),
         )
         return await self.async_step_pick_implementation()
+
+
+class TerrainaOptionsFlow(config_entries.OptionsFlow):
+    """Options flow — configure smart weather protection sensors."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        if user_input is not None:
+            # Store empty strings as absent so SmartProtectionManager treats them as "not configured"
+            cleaned = {k: v for k, v in user_input.items() if v != ""}
+            for k in ("rain_factor_mm", "max_temperature", "auto_dock_unsafe"):
+                if k in user_input:
+                    cleaned[k] = user_input[k]
+            return self.async_create_entry(title="", data=cleaned)
+
+        opts = self.config_entry.options
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "precipitation_sensor",
+                        default=opts.get("precipitation_sensor", ""),
+                    ): str,
+                    vol.Optional(
+                        "rain_hold_base_hours",
+                        default=opts.get("rain_hold_base_hours", 0),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0, max=12)),
+                    vol.Optional(
+                        "rain_factor_mm",
+                        default=opts.get("rain_factor_mm", 5),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+                    vol.Optional(
+                        "rain_hold_step_hours",
+                        default=opts.get("rain_hold_step_hours", 1),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+                    vol.Optional(
+                        "rain_hold_max_hours",
+                        default=opts.get("rain_hold_max_hours", 24),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=72)),
+                    vol.Optional(
+                        "forecast_entity",
+                        default=opts.get("forecast_entity", ""),
+                    ): str,
+                    vol.Optional(
+                        "forecast_hours_ahead",
+                        default=opts.get("forecast_hours_ahead", 2),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+                    vol.Optional(
+                        "temperature_sensor",
+                        default=opts.get("temperature_sensor", ""),
+                    ): str,
+                    vol.Optional(
+                        "max_temperature",
+                        default=opts.get("max_temperature", 32),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=20, max=40)),
+                    vol.Optional(
+                        "auto_dock_unsafe",
+                        default=opts.get("auto_dock_unsafe", False),
+                    ): bool,
+                }
+            ),
+        )
