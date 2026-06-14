@@ -12,8 +12,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CLIENT_ID, CLIENT_SECRET, SERVER_DOMAIN_NAME
+from .const import CLIENT_ID, CLIENT_SECRET, PLATFORM_CLIENT_ID, PLATFORM_CLIENT_SECRET, SERVER_DOMAIN_NAME
 from .grpc_util import MessageBuilder
+from .util import get_standard_headers
 
 _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = ClientTimeout(total=10)
@@ -141,100 +142,83 @@ class TerrainaHttpClient:
     ) -> None:
         """Probe REST endpoints to discover cloud map/boundary data.
 
-        v1.3.17 confirmed:
-          - /iot-map/device/*        → HTTP 403  (route EXISTS in gateway)
-          - /api/smarthome/device/*  → HTTP 403  (route EXISTS in gateway)
-          - /smarthome/device/* map  → HTTP 404  (route does not exist)
-          - alt subdomains           → DNS error  (do not exist)
+        v1.3.18 confirmed: every /iot-map/ endpoint name returns 403 with just
+        the ory_at_ Bearer — auth is the blocker, not the endpoint name.
 
-        v1.3.18: focus entirely on the 403 prefixes with many endpoint-name
-        and parameter combinations, plus GET variants.
+        v1.3.19: try 4 authentication header strategies:
+          A) ory_at_ Bearer only              (confirmed 403)
+          B) app_token (kk5fd5Ce) as Bearer
+          C) ory_at_ Bearer + x-api-key: app_token
+          D) full gRPC-style: ory_at_ + x-api-key + HMAC platform headers
         """
-        headers = _bearer_headers(config_entry.data["token"])
+        ory_at = (config_entry.data.get("token") or {}).get("access_token", "")
+        app_token = (config_entry.data.get("app_token") or {}).get("access_token", "")
 
-        # POST probes: (path, body)
-        post_probes: list[tuple[str, dict]] = []
+        base_ct = {"Content-Type": "application/json"}
+        platform_sig = get_standard_headers(PLATFORM_CLIENT_ID, PLATFORM_CLIENT_SECRET) or {}
 
-        # /iot-map/device/* — try every likely endpoint name with just sn
-        for endpoint in [
-            "getMulBoundary", "getMulMapData", "getMulMapVersion",
-            "getMapUrl", "getMapInfo", "getBoundaryData", "getMapBoundary",
-            "getBoundaryList", "getMapDetail", "getMapList", "getMapFile",
-            "getBoundaryInfo", "getZones", "getRegions",
-        ]:
-            post_probes.append((f"/iot-map/device/{endpoint}", {"sn": sn}))
+        auth_variants: list[tuple[str, dict]] = [
+            ("ory_only",   {**base_ct, "Authorization": f"Bearer {ory_at}"}),
+            ("app_bearer", {**base_ct, "Authorization": f"Bearer {app_token}"}),
+            ("ory+apikey", {**base_ct, "Authorization": f"Bearer {ory_at}", "x-api-key": app_token}),
+            ("full_grpc",  {**base_ct, "Authorization": f"Bearer {ory_at}", "x-api-key": app_token, **platform_sig}),
+        ]
 
-        # /iot-map/map/* sub-path
-        for endpoint in ["getBoundary", "getMulBoundary", "getMapData", "getMapUrl"]:
-            post_probes.append((f"/iot-map/map/{endpoint}", {"sn": sn, "mapId": 1}))
-
-        # Known HTTP 403 paths with varied parameter sets
-        for path in ["/iot-map/device/getMulBoundary", "/iot-map/device/getBoundary"]:
-            post_probes.append((path, {"sn": sn, "mapId": 1}))
-            post_probes.append((path, {"sn": sn, "mapVersion": map_version}))
-            if boundary_version:
-                post_probes.append((path, {"sn": sn, "version": boundary_version}))
-                post_probes.append((path, {"sn": sn, "boundaryVersion": boundary_version}))
-                post_probes.append((path, {"sn": sn, "mapId": 1, "version": boundary_version}))
-
-        # /api/smarthome/device/*
-        for endpoint in [
-            "getBoundary", "getMulBoundary", "getMapData", "getMapUrl",
-            "getMulMapData", "getMulMapVersion", "getMapInfo", "getMapFile",
-        ]:
-            post_probes.append((f"/api/smarthome/device/{endpoint}", {"sn": sn, "mapId": 1}))
-
-        for path, body in post_probes:
-            url = f"{self._base_url}{path}"
-            try:
-                async with self._session.post(
-                    url, json=body, headers=headers, timeout=_TIMEOUT
-                ) as resp:
-                    http_status = resp.status
-                    try:
-                        payload = await resp.json()
-                    except Exception:
-                        payload = (await resp.text())[:300]
-                    _LOGGER.debug(
-                        "REST probe POST %s %s → HTTP%d %s",
-                        path, body, http_status, payload,
-                    )
-            except Exception as exc:
-                _LOGGER.debug("REST probe POST %s → error: %s", path, exc)
-
-        # GET probes — both the previously 404 paths and the new 403 paths
-        get_paths = [
-            "/smarthome/device/getMulBoundary",
-            "/smarthome/device/getBoundary",
-            "/smarthome/device/getMapUrl",
+        probe_paths = [
             "/iot-map/device/getMulBoundary",
             "/iot-map/device/getBoundary",
             "/iot-map/device/getMapData",
             "/iot-map/device/getMulMapVersion",
             "/api/smarthome/device/getMulBoundary",
             "/api/smarthome/device/getBoundary",
-            "/api/smarthome/device/getMapData",
         ]
+        body_base: dict = {"sn": sn, "mapId": 1}
+
+        for path in probe_paths:
+            url = f"{self._base_url}{path}"
+            for auth_name, hdrs in auth_variants:
+                try:
+                    async with self._session.post(
+                        url, json=body_base, headers=hdrs, timeout=_TIMEOUT
+                    ) as resp:
+                        http_status = resp.status
+                        try:
+                            payload = await resp.json()
+                        except Exception:
+                            payload = (await resp.text())[:300]
+                        _LOGGER.debug(
+                            "REST probe [%s] POST %s → HTTP%d %s",
+                            auth_name, path, http_status, payload,
+                        )
+                except Exception as exc:
+                    _LOGGER.debug("REST probe [%s] POST %s → error: %s", auth_name, path, exc)
+
+        # GET variants for the most likely boundary endpoints
+        get_paths = [
+            "/iot-map/device/getMulBoundary",
+            "/iot-map/device/getBoundary",
+            "/smarthome/device/getMulBoundary",
+        ]
+        params: dict[str, str] = {"sn": sn, "mapId": "1"}
         for path in get_paths:
             url = f"{self._base_url}{path}"
-            params: dict[str, str] = {"sn": sn, "mapId": "1"}
-            if boundary_version:
-                params["boundaryVersion"] = str(boundary_version)
-            try:
-                async with self._session.get(
-                    url, params=params, headers=headers, timeout=_TIMEOUT
-                ) as resp:
-                    http_status = resp.status
-                    try:
-                        payload = await resp.json()
-                    except Exception:
-                        payload = (await resp.text())[:300]
-                    _LOGGER.debug(
-                        "REST probe GET %s → HTTP%d %s",
-                        path, http_status, payload,
-                    )
-            except Exception as exc:
-                _LOGGER.debug("REST probe GET %s → error: %s", path, exc)
+            for auth_name, hdrs in auth_variants:
+                try:
+                    async with self._session.get(
+                        url, params=params, headers=hdrs, timeout=_TIMEOUT
+                    ) as resp:
+                        http_status = resp.status
+                        try:
+                            payload = await resp.json()
+                        except Exception:
+                            payload = (await resp.text())[:300]
+                        _LOGGER.debug(
+                            "REST probe [%s] GET %s → HTTP%d %s",
+                            auth_name, path, http_status, payload,
+                        )
+                except Exception as exc:
+                    _LOGGER.debug("REST probe [%s] GET %s → error: %s", auth_name, path, exc)
+
 
     # ------------------------------------------------------------------
     # Internal helpers
