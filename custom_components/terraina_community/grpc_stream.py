@@ -76,17 +76,38 @@ def _query_map_msgs(sn: str) -> list[platform_iot_streams_pb2.In]:
     return msgs
 
 
-def _query_mul_map_data_msgs(sn: str, map_ver: int) -> list[platform_iot_streams_pb2.In]:
+def _query_mul_map_data_msgs(
+    sn: str, map_ver: int, boundary_ver: int = 0
+) -> list[platform_iot_streams_pb2.In]:
     """Follow-up queries once we know the mapVersion from getMulMapVersion.
 
-    We probe multiple parameter key names because the protocol is undocumented.
+    Probes getMulMapData and getMulBoundary/getBoundary with multiple parameter
+    combinations — the protocol is undocumented and the device silently drops
+    queries with wrong/missing parameters.
     """
-    variants = [
+    variants: list[dict] = [
+        # Map data variants
         {"getMulMapData": {"mapVer": map_ver}},
         {"getMulMapData": {"mapVersion": map_ver}},
         {"getMulMapData": {"mapId": 1, "mapVer": map_ver}},
+        # Boundary variants — without version
         {"getMulBoundary": {"mapId": 1}},
+        {"getMulBoundary": {"boundaryId": 1}},
+        {"getMulBoundary": {"mapId": 1, "boundaryId": 1}},
+        # Singular getBoundary
+        {"getBoundary": {"mapId": 1}},
+        {"getBoundary": {"boundaryId": 1}},
     ]
+    if boundary_ver:
+        variants.extend([
+            # Boundary variants with boundary version from getMulMapVersion
+            {"getMulBoundary": {"version": boundary_ver}},
+            {"getMulBoundary": {"mapId": 1, "version": boundary_ver}},
+            {"getMulBoundary": {"boundaryId": 1, "version": boundary_ver}},
+            {"getMulBoundary": {"mapId": 1, "boundaryId": 1, "version": boundary_ver}},
+            {"getBoundary": {"version": boundary_ver}},
+            {"getBoundary": {"mapId": 1, "version": boundary_ver}},
+        ])
     msgs = []
     for params in variants:
         msg_id = "ha-" + random_code()
@@ -297,15 +318,24 @@ class TerrainaGrpcStream:
                 _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
 
-                # As soon as we know the mapVersion, probe getMulMapData with params
+                # As soon as we know the mapVersion, probe getMulMapData + getMulBoundary
                 if "getMulMapVersion" in state and not self._map_data_queried:
-                    map_ver = (state["getMulMapVersion"].get("data") or {}).get("mapVersion")
+                    mv_data = (state["getMulMapVersion"].get("data") or {})
+                    map_ver = mv_data.get("mapVersion")
+                    boundary_ver: int = (
+                        (mv_data.get("boundary") or {})
+                        .get("boundary1", {})
+                        .get("version", 0)
+                    )
                     if map_ver:
                         self._map_data_queried = True
-                        followup_msgs = _query_mul_map_data_msgs(self._sn, map_ver)
+                        followup_msgs = _query_mul_map_data_msgs(
+                            self._sn, map_ver, boundary_ver
+                        )
                         _LOGGER.debug(
-                            "gRPC: queuing %d getMulMapData variants with mapVer=%d for %s",
-                            len(followup_msgs), map_ver, self._sn,
+                            "gRPC: queuing %d map+boundary queries "
+                            "mapVer=%d boundaryVer=%d for %s",
+                            len(followup_msgs), map_ver, boundary_ver, self._sn,
                         )
 
                 if "postDeviceDetail" in state:

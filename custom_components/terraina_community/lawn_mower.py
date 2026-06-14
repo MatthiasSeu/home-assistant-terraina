@@ -103,7 +103,6 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
         self._map_w: int = 912
         self._map_h: int = 705
         self._current_pos: tuple[int, int, float] | None = None
-        self._map_rest_probed: bool = False  # reset on each HA start
 
         # Zone session tracking
         self._zone_sessions: list[tuple[bytes, tuple[int, int, int]]] = []
@@ -248,27 +247,12 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
             self._schedule = sorted(days, key=lambda d: d.get("week", 0))
 
     def _update_map_cloud(self, state_dict: dict) -> None:
-        """Handle cloud map responses and trigger REST probing on first contact."""
+        """Handle cloud map responses."""
         if "getMulMapVersion" in state_dict:
             _LOGGER.debug(
                 "getMulMapVersion for %s: %s",
                 self._sn, state_dict["getMulMapVersion"],
             )
-            if not self._map_rest_probed and self.hass:
-                self._map_rest_probed = True
-                data = (state_dict["getMulMapVersion"].get("data") or {})
-                map_ver = data.get("mapVersion")
-                boundary_ver: int = (
-                    (data.get("boundary") or {})
-                    .get("boundary1", {})
-                    .get("version", 0)
-                )
-                if map_ver:
-                    self.hass.async_create_task(
-                        self._http_client.probe_map_rest(
-                            self._entry, self._sn, map_ver, boundary_ver
-                        )
-                    )
         if "getMulMapData" in state_dict:
             _LOGGER.debug(
                 "getMulMapData for %s: %s",
