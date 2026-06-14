@@ -329,6 +329,8 @@ class TerrainaGrpcStream:
                         v = str(p.intValue)
                     elif p.doubleValue:
                         v = str(p.doubleValue)
+                    elif p.bytesValue:
+                        v = f"<bytes:{len(p.bytesValue)}>"
                     else:
                         v = "(empty)"
                     prop_parts.append(f"{p.name}={v}")

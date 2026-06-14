@@ -103,7 +103,7 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
         self._map_w: int = 912
         self._map_h: int = 705
         self._current_pos: tuple[int, int, float] | None = None
-        self._map_rest_probed: bool = False
+        self._map_rest_probed: bool = False  # reset on each HA start
 
         # Zone session tracking
         self._zone_sessions: list[tuple[bytes, tuple[int, int, int]]] = []

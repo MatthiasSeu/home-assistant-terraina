@@ -137,24 +137,47 @@ class TerrainaHttpClient:
     ) -> None:
         """Probe REST endpoints to discover cloud map data location.
 
-        Called once after the first getMulMapVersion response. Logs the raw
-        HTTP status and response body for each candidate endpoint so we can
-        identify which ones the DCK platform actually serves.
+        Round 2: tries alternative subdomains (iot-map, iot-file, iot-data,
+        iot-media, iot-oss) plus GET variants on the known base URL.
         """
         headers = _bearer_headers(config_entry.data["token"])
-        post_probes: list[tuple[str, dict]] = [
-            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1, "mapVersion": map_version}),
-            ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1, "mapVer": map_version}),
-            ("/smarthome/map/getMapData",        {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMapInfo",     {"sn": sn}),
-            ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": 1}),
-        ]
-        for path, body in post_probes:
-            url = f"{self._base_url}{path}"
+
+        # Build alternative base URLs by swapping the service component
+        alt_services = ["iot-map", "iot-file", "iot-data", "iot-media", "iot-oss"]
+        alt_bases: list[str] = []
+        for svc in alt_services:
+            alt = self._base_url.replace("iot-platform", svc)
+            if alt != self._base_url:
+                alt_bases.append(alt)
+
+        # POST probes: (base_url, path, body)
+        post_probes: list[tuple[str, str, dict]] = []
+
+        # New path-prefix variants on the main base URL
+        for path, body in [
+            ("/smarthome/device/getMapFile",    {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMapOssUrl",  {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMapCdnUrl",  {"sn": sn, "mapId": 1}),
+            ("/iot-map/device/getMapData",      {"sn": sn, "mapId": 1}),
+            ("/iot-map/device/getBoundary",     {"sn": sn, "mapId": 1}),
+            ("/api/smarthome/device/getMapUrl", {"sn": sn, "mapId": 1}),
+        ]:
+            post_probes.append((self._base_url, path, body))
+
+        # Same key paths probed against each alternative subdomain
+        for alt_base in alt_bases:
+            for path, body in [
+                ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1}),
+                ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1, "mapVer": map_version}),
+                ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": 1}),
+                ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": 1}),
+                ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": 1}),
+                ("/smarthome/device/getMapInfo",     {"sn": sn}),
+            ]:
+                post_probes.append((alt_base, path, body))
+
+        for base, path, body in post_probes:
+            url = f"{base}{path}"
             try:
                 async with self._session.post(
                     url, json=body, headers=headers, timeout=_TIMEOUT
@@ -164,12 +187,40 @@ class TerrainaHttpClient:
                         payload = await resp.json()
                     except Exception:
                         payload = (await resp.text())[:200]
+                    host = base.split("//")[-1].split(".")[0]
                     _LOGGER.debug(
-                        "REST map probe POST %s %s → HTTP%d %s",
-                        path, body, http_status, payload,
+                        "REST map probe POST [%s]%s %s → HTTP%d %s",
+                        host, path, body, http_status, payload,
                     )
             except Exception as exc:
-                _LOGGER.debug("REST map probe POST %s → error: %s", path, exc)
+                host = base.split("//")[-1].split(".")[0]
+                _LOGGER.debug("REST map probe POST [%s]%s → error: %s", host, path, exc)
+
+        # GET probes on the main base URL (query-string params)
+        get_probes: list[tuple[str, dict]] = [
+            ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": "1"}),
+            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": "1"}),
+            ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": "1"}),
+            ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": "1", "mapVer": str(map_version)}),
+            ("/smarthome/device/getMapInfo",     {"sn": sn}),
+        ]
+        for path, params in get_probes:
+            url = f"{self._base_url}{path}"
+            try:
+                async with self._session.get(
+                    url, params=params, headers=headers, timeout=_TIMEOUT
+                ) as resp:
+                    http_status = resp.status
+                    try:
+                        payload = await resp.json()
+                    except Exception:
+                        payload = (await resp.text())[:200]
+                    _LOGGER.debug(
+                        "REST map probe GET %s %s → HTTP%d %s",
+                        path, params, http_status, payload,
+                    )
+            except Exception as exc:
+                _LOGGER.debug("REST map probe GET %s → error: %s", path, exc)
 
     # ------------------------------------------------------------------
     # Internal helpers
