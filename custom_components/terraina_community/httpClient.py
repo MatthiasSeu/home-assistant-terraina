@@ -132,6 +132,45 @@ class TerrainaHttpClient:
             config_entry, serial_number, WORKING_STATUS.index("backing")
         )
 
+    async def probe_map_rest(
+        self, config_entry: ConfigEntry, sn: str, map_version: int
+    ) -> None:
+        """Probe REST endpoints to discover cloud map data location.
+
+        Called once after the first getMulMapVersion response. Logs the raw
+        HTTP status and response body for each candidate endpoint so we can
+        identify which ones the DCK platform actually serves.
+        """
+        headers = _bearer_headers(config_entry.data["token"])
+        post_probes: list[tuple[str, dict]] = [
+            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1, "mapVersion": map_version}),
+            ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1, "mapVer": map_version}),
+            ("/smarthome/map/getMapData",        {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": 1}),
+            ("/smarthome/device/getMapInfo",     {"sn": sn}),
+            ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": 1}),
+        ]
+        for path, body in post_probes:
+            url = f"{self._base_url}{path}"
+            try:
+                async with self._session.post(
+                    url, json=body, headers=headers, timeout=_TIMEOUT
+                ) as resp:
+                    http_status = resp.status
+                    try:
+                        payload = await resp.json()
+                    except Exception:
+                        payload = (await resp.text())[:200]
+                    _LOGGER.debug(
+                        "REST map probe POST %s %s → HTTP%d %s",
+                        path, body, http_status, payload,
+                    )
+            except Exception as exc:
+                _LOGGER.debug("REST map probe POST %s → error: %s", path, exc)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
