@@ -133,51 +133,59 @@ class TerrainaHttpClient:
         )
 
     async def probe_map_rest(
-        self, config_entry: ConfigEntry, sn: str, map_version: int
+        self,
+        config_entry: ConfigEntry,
+        sn: str,
+        map_version: int,
+        boundary_version: int = 0,
     ) -> None:
-        """Probe REST endpoints to discover cloud map data location.
+        """Probe REST endpoints to discover cloud map/boundary data.
 
-        Round 2: tries alternative subdomains (iot-map, iot-file, iot-data,
-        iot-media, iot-oss) plus GET variants on the known base URL.
+        v1.3.17 confirmed:
+          - /iot-map/device/*        → HTTP 403  (route EXISTS in gateway)
+          - /api/smarthome/device/*  → HTTP 403  (route EXISTS in gateway)
+          - /smarthome/device/* map  → HTTP 404  (route does not exist)
+          - alt subdomains           → DNS error  (do not exist)
+
+        v1.3.18: focus entirely on the 403 prefixes with many endpoint-name
+        and parameter combinations, plus GET variants.
         """
         headers = _bearer_headers(config_entry.data["token"])
 
-        # Build alternative base URLs by swapping the service component
-        alt_services = ["iot-map", "iot-file", "iot-data", "iot-media", "iot-oss"]
-        alt_bases: list[str] = []
-        for svc in alt_services:
-            alt = self._base_url.replace("iot-platform", svc)
-            if alt != self._base_url:
-                alt_bases.append(alt)
+        # POST probes: (path, body)
+        post_probes: list[tuple[str, dict]] = []
 
-        # POST probes: (base_url, path, body)
-        post_probes: list[tuple[str, str, dict]] = []
-
-        # New path-prefix variants on the main base URL
-        for path, body in [
-            ("/smarthome/device/getMapFile",    {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMapOssUrl",  {"sn": sn, "mapId": 1}),
-            ("/smarthome/device/getMapCdnUrl",  {"sn": sn, "mapId": 1}),
-            ("/iot-map/device/getMapData",      {"sn": sn, "mapId": 1}),
-            ("/iot-map/device/getBoundary",     {"sn": sn, "mapId": 1}),
-            ("/api/smarthome/device/getMapUrl", {"sn": sn, "mapId": 1}),
+        # /iot-map/device/* — try every likely endpoint name with just sn
+        for endpoint in [
+            "getMulBoundary", "getMulMapData", "getMulMapVersion",
+            "getMapUrl", "getMapInfo", "getBoundaryData", "getMapBoundary",
+            "getBoundaryList", "getMapDetail", "getMapList", "getMapFile",
+            "getBoundaryInfo", "getZones", "getRegions",
         ]:
-            post_probes.append((self._base_url, path, body))
+            post_probes.append((f"/iot-map/device/{endpoint}", {"sn": sn}))
 
-        # Same key paths probed against each alternative subdomain
-        for alt_base in alt_bases:
-            for path, body in [
-                ("/smarthome/device/getMapData",     {"sn": sn, "mapId": 1}),
-                ("/smarthome/device/getMulMapData",  {"sn": sn, "mapId": 1, "mapVer": map_version}),
-                ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": 1}),
-                ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": 1}),
-                ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": 1}),
-                ("/smarthome/device/getMapInfo",     {"sn": sn}),
-            ]:
-                post_probes.append((alt_base, path, body))
+        # /iot-map/map/* sub-path
+        for endpoint in ["getBoundary", "getMulBoundary", "getMapData", "getMapUrl"]:
+            post_probes.append((f"/iot-map/map/{endpoint}", {"sn": sn, "mapId": 1}))
 
-        for base, path, body in post_probes:
-            url = f"{base}{path}"
+        # Known HTTP 403 paths with varied parameter sets
+        for path in ["/iot-map/device/getMulBoundary", "/iot-map/device/getBoundary"]:
+            post_probes.append((path, {"sn": sn, "mapId": 1}))
+            post_probes.append((path, {"sn": sn, "mapVersion": map_version}))
+            if boundary_version:
+                post_probes.append((path, {"sn": sn, "version": boundary_version}))
+                post_probes.append((path, {"sn": sn, "boundaryVersion": boundary_version}))
+                post_probes.append((path, {"sn": sn, "mapId": 1, "version": boundary_version}))
+
+        # /api/smarthome/device/*
+        for endpoint in [
+            "getBoundary", "getMulBoundary", "getMapData", "getMapUrl",
+            "getMulMapData", "getMulMapVersion", "getMapInfo", "getMapFile",
+        ]:
+            post_probes.append((f"/api/smarthome/device/{endpoint}", {"sn": sn, "mapId": 1}))
+
+        for path, body in post_probes:
+            url = f"{self._base_url}{path}"
             try:
                 async with self._session.post(
                     url, json=body, headers=headers, timeout=_TIMEOUT
@@ -186,26 +194,32 @@ class TerrainaHttpClient:
                     try:
                         payload = await resp.json()
                     except Exception:
-                        payload = (await resp.text())[:200]
-                    host = base.split("//")[-1].split(".")[0]
+                        payload = (await resp.text())[:300]
                     _LOGGER.debug(
-                        "REST map probe POST [%s]%s %s → HTTP%d %s",
-                        host, path, body, http_status, payload,
+                        "REST probe POST %s %s → HTTP%d %s",
+                        path, body, http_status, payload,
                     )
             except Exception as exc:
-                host = base.split("//")[-1].split(".")[0]
-                _LOGGER.debug("REST map probe POST [%s]%s → error: %s", host, path, exc)
+                _LOGGER.debug("REST probe POST %s → error: %s", path, exc)
 
-        # GET probes on the main base URL (query-string params)
-        get_probes: list[tuple[str, dict]] = [
-            ("/smarthome/device/getMapUrl",      {"sn": sn, "mapId": "1"}),
-            ("/smarthome/device/getMapData",     {"sn": sn, "mapId": "1"}),
-            ("/smarthome/device/getBoundary",    {"sn": sn, "mapId": "1"}),
-            ("/smarthome/device/getMulBoundary", {"sn": sn, "mapId": "1", "mapVer": str(map_version)}),
-            ("/smarthome/device/getMapInfo",     {"sn": sn}),
+        # GET probes — both the previously 404 paths and the new 403 paths
+        get_paths = [
+            "/smarthome/device/getMulBoundary",
+            "/smarthome/device/getBoundary",
+            "/smarthome/device/getMapUrl",
+            "/iot-map/device/getMulBoundary",
+            "/iot-map/device/getBoundary",
+            "/iot-map/device/getMapData",
+            "/iot-map/device/getMulMapVersion",
+            "/api/smarthome/device/getMulBoundary",
+            "/api/smarthome/device/getBoundary",
+            "/api/smarthome/device/getMapData",
         ]
-        for path, params in get_probes:
+        for path in get_paths:
             url = f"{self._base_url}{path}"
+            params: dict[str, str] = {"sn": sn, "mapId": "1"}
+            if boundary_version:
+                params["boundaryVersion"] = str(boundary_version)
             try:
                 async with self._session.get(
                     url, params=params, headers=headers, timeout=_TIMEOUT
@@ -214,13 +228,13 @@ class TerrainaHttpClient:
                     try:
                         payload = await resp.json()
                     except Exception:
-                        payload = (await resp.text())[:200]
+                        payload = (await resp.text())[:300]
                     _LOGGER.debug(
-                        "REST map probe GET %s %s → HTTP%d %s",
-                        path, params, http_status, payload,
+                        "REST probe GET %s → HTTP%d %s",
+                        path, http_status, payload,
                     )
             except Exception as exc:
-                _LOGGER.debug("REST map probe GET %s → error: %s", path, exc)
+                _LOGGER.debug("REST probe GET %s → error: %s", path, exc)
 
     # ------------------------------------------------------------------
     # Internal helpers

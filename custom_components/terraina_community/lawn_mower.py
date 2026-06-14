@@ -256,13 +256,18 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
             )
             if not self._map_rest_probed and self.hass:
                 self._map_rest_probed = True
-                map_ver = (
-                    (state_dict["getMulMapVersion"].get("data") or {})
-                    .get("mapVersion")
+                data = (state_dict["getMulMapVersion"].get("data") or {})
+                map_ver = data.get("mapVersion")
+                boundary_ver: int = (
+                    (data.get("boundary") or {})
+                    .get("boundary1", {})
+                    .get("version", 0)
                 )
                 if map_ver:
                     self.hass.async_create_task(
-                        self._http_client.probe_map_rest(self._entry, self._sn, map_ver)
+                        self._http_client.probe_map_rest(
+                            self._entry, self._sn, map_ver, boundary_ver
+                        )
                     )
         if "getMulMapData" in state_dict:
             _LOGGER.debug(
