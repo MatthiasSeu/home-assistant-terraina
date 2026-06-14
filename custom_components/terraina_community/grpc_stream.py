@@ -62,13 +62,8 @@ def _query_state_msg(sn: str) -> platform_iot_streams_pb2.In:
 
 
 def _query_map_msgs(sn: str) -> list[platform_iot_streams_pb2.In]:
-    """Return probe messages for map-related gRPC commands.
-
-    We try several candidate names because the exact command is unknown.
-    Whichever the server recognises will appear in the log as a known or
-    unknown state key — that tells us the correct command name.
-    """
-    candidates = ["getMulMapData", "getMapConfig", "getMulMapVersion"]
+    """Return probe messages for map-related gRPC commands (sent once at startup, no params)."""
+    candidates = ["getMulMapData", "getMapConfig", "getMulMapVersion", "getMulBoundary"]
     msgs = []
     for cmd in candidates:
         msg_id = "ha-" + random_code()
@@ -77,6 +72,27 @@ def _query_map_msgs(sn: str) -> list[platform_iot_streams_pb2.In]:
         msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
             svc_id, "get", {cmd: None}
         )
+        msgs.append(platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64()))
+    return msgs
+
+
+def _query_mul_map_data_msgs(sn: str, map_ver: int) -> list[platform_iot_streams_pb2.In]:
+    """Follow-up queries once we know the mapVersion from getMulMapVersion.
+
+    We probe multiple parameter key names because the protocol is undocumented.
+    """
+    variants = [
+        {"getMulMapData": {"mapVer": map_ver}},
+        {"getMulMapData": {"mapVersion": map_ver}},
+        {"getMulMapData": {"mapId": 1, "mapVer": map_ver}},
+        {"getMulBoundary": {"mapId": 1}},
+    ]
+    msgs = []
+    for params in variants:
+        msg_id = "ha-" + random_code()
+        svc_id = "ha-" + random_code()
+        msg = DeviceMessageWrapper()
+        msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(svc_id, "get", params)
         msgs.append(platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64()))
     return msgs
 
@@ -121,6 +137,7 @@ class TerrainaGrpcStream:
         self._on_unauthenticated = on_unauthenticated
         self._task: asyncio.Task | None = None
         self._running = False
+        self._map_data_queried: bool = False
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -178,6 +195,8 @@ class TerrainaGrpcStream:
         metadata = _build_metadata(ory, app)
         creds = grpc.ssl_channel_credentials()
 
+        self._map_data_queried = False  # reset per connection
+
         async with grpc.aio.secure_channel(self._host, creds) as channel:
             stub = channel.stream_stream(
                 _GRPC_PATH,
@@ -200,7 +219,12 @@ class TerrainaGrpcStream:
                 async for msg in call:
                     if not self._running:
                         break
-                    newly_active = await self._handle_message(msg)
+                    newly_active, followup_msgs = await self._handle_message(msg)
+                    for fmsg in followup_msgs:
+                        try:
+                            await call.write(fmsg)
+                        except Exception:
+                            pass
                     if newly_active and not schedule_fetched:
                         # Mower just became active — grab schedule immediately
                         try:
@@ -241,27 +265,30 @@ class TerrainaGrpcStream:
             except Exception:
                 break
 
-    async def _handle_message(self, msg: platform_iot_streams_pb2.Out) -> bool:
+    async def _handle_message(
+        self, msg: platform_iot_streams_pb2.Out
+    ) -> tuple[bool, list[platform_iot_streams_pb2.In]]:
         """Handle one incoming gRPC message.
 
-        Returns True if the device just became active (postDeviceDetail push
-        with an active working status), so the caller can trigger on-demand
-        queries while the device is reachable.
+        Returns (device_active, followup_msgs):
+          device_active   — True when postDeviceDetail shows the device is mowing
+          followup_msgs   — additional messages to write to the stream immediately
         """
         if msg.type == "heartbeat":
             _LOGGER.debug("gRPC heartbeat from server: %s", msg.payload)
-            return False
+            return False, []
 
         # Server sends device-state responses with type="" (not "device")
         if msg.type not in ("device", ""):
             _LOGGER.debug("gRPC msg type=%r sm=%r (ignored)", msg.type, msg.sm)
-            return False
+            return False, []
 
         if not msg.payload:
             _LOGGER.debug("gRPC msg type=%r sm=%r — empty payload (skipped)", msg.type, msg.sm)
-            return False
+            return False, []
 
         device_active = False
+        followup_msgs: list[platform_iot_streams_pb2.In] = []
         try:
             wrapper = DeviceMessageWrapper.from_base64(msg.payload)
             extractor = PayLoadExtractor(wrapper)
@@ -269,6 +296,18 @@ class TerrainaGrpcStream:
             if state:
                 _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
+
+                # As soon as we know the mapVersion, probe getMulMapData with params
+                if "getMulMapVersion" in state and not self._map_data_queried:
+                    map_ver = (state["getMulMapVersion"].get("data") or {}).get("mapVersion")
+                    if map_ver:
+                        self._map_data_queried = True
+                        followup_msgs = _query_mul_map_data_msgs(self._sn, map_ver)
+                        _LOGGER.debug(
+                            "gRPC: queuing %d getMulMapData variants with mapVer=%d for %s",
+                            len(followup_msgs), map_ver, self._sn,
+                        )
+
                 if "postDeviceDetail" in state:
                     info = state["postDeviceDetail"].get("info") or {}
                     try:
@@ -303,4 +342,4 @@ class TerrainaGrpcStream:
                 )
         except Exception:
             _LOGGER.debug("Failed to parse gRPC payload (type=%r sm=%r)", msg.type, msg.sm, exc_info=True)
-        return device_active
+        return device_active, followup_msgs

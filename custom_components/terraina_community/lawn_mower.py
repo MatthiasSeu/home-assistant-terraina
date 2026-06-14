@@ -157,6 +157,7 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
             self._manual_mode_type = info["manualModeType"]
 
         self._update_schedule(state_dict)
+        self._update_map_cloud(state_dict)
 
         raw = info.get("status") or state_dict.get("status") or state_dict.get("workStatus")
         if raw is None:
@@ -244,6 +245,29 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
             days = [days]
         if days:
             self._schedule = sorted(days, key=lambda d: d.get("week", 0))
+
+    def _update_map_cloud(self, state_dict: dict) -> None:
+        """Log cloud map responses so we can understand the protocol."""
+        if "getMulMapVersion" in state_dict:
+            _LOGGER.debug(
+                "getMulMapVersion for %s: %s",
+                self._sn, state_dict["getMulMapVersion"],
+            )
+        if "getMulMapData" in state_dict:
+            _LOGGER.debug(
+                "getMulMapData for %s: %s",
+                self._sn, state_dict["getMulMapData"],
+            )
+        if "getMulBoundary" in state_dict:
+            _LOGGER.debug(
+                "getMulBoundary for %s: %s",
+                self._sn, state_dict["getMulBoundary"],
+            )
+        if "getMapConfig" in state_dict:
+            _LOGGER.debug(
+                "getMapConfig for %s: %s",
+                self._sn, state_dict["getMapConfig"],
+            )
 
     def _update_path(self, state_dict: dict) -> None:
         """Process getPath data: update bitmap, position, and schedule map write."""
