@@ -61,6 +61,26 @@ def _query_state_msg(sn: str) -> platform_iot_streams_pb2.In:
     return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
 
 
+def _query_map_msgs(sn: str) -> list[platform_iot_streams_pb2.In]:
+    """Return probe messages for map-related gRPC commands.
+
+    We try several candidate names because the exact command is unknown.
+    Whichever the server recognises will appear in the log as a known or
+    unknown state key — that tells us the correct command name.
+    """
+    candidates = ["getMulMapData", "getMapConfig", "getMulMapVersion"]
+    msgs = []
+    for cmd in candidates:
+        msg_id = "ha-" + random_code()
+        svc_id = "ha-" + random_code()
+        msg = DeviceMessageWrapper()
+        msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
+            svc_id, "get", {cmd: None}
+        )
+        msgs.append(platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64()))
+    return msgs
+
+
 def _query_regions_msg(sn: str) -> platform_iot_streams_pb2.In:
     msg_id = "ha-" + random_code()
     svc_id = "ha-" + random_code()
@@ -204,6 +224,8 @@ class TerrainaGrpcStream:
             await call.write(_query_state_msg(self._sn))
             await call.write(_query_schedule_msg(self._sn))
             await call.write(_query_regions_msg(self._sn))
+            for map_msg in _query_map_msgs(self._sn):
+                await call.write(map_msg)
         except Exception:
             return
         tick = 0

@@ -1,7 +1,7 @@
 {
   "domain": "terraina_community",
   "name": "TERRAINA Community",
-  "version": "1.3.13",
+  "version": "1.3.14",
   "config_flow": true,
   "dependencies": [],
   "requirements": ["protobuf>=6.30.0", "grpcio>=1.51.0"],

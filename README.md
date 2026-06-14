@@ -1,6 +1,6 @@
 # TERRAINA Community Integration for Home Assistant
 
-Version: 1.3.13
+Version: 1.3.14
 
 A community fork of [DCK-China/home-assistant-terraina](https://github.com/DCK-China/home-assistant-terraina) with extended functionality.
 
