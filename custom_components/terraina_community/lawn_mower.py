@@ -248,6 +248,8 @@ class TerrainaLawnMower(CoordinatorEntity[TerrainaCoordinator], LawnMowerEntity,
 
     def _update_map_cloud(self, state_dict: dict) -> None:
         """Handle cloud map responses."""
+        if "mapCreate" in state_dict:
+            _LOGGER.debug("mapCreate push for %s — device updated mow map", self._sn)
         if "getMulMapVersion" in state_dict:
             _LOGGER.debug(
                 "getMulMapVersion for %s: %s",

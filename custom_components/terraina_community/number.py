@@ -98,16 +98,20 @@ class TerrainaCuttingHeightNumber(CoordinatorEntity[TerrainaCoordinator], Number
         self.async_write_ha_state()
 
     def update_from_grpc(self, state_dict: dict) -> None:
+        info: dict = {}
         settings: dict = {}
         if "getDeviceDetail" in state_dict:
             data = state_dict["getDeviceDetail"].get("data") or {}
+            info = data.get("info") or {}
             settings = data.get("settings") or {}
         elif "postDeviceDetail" in state_dict:
+            info = state_dict["postDeviceDetail"].get("info") or {}
             settings = state_dict["postDeviceDetail"].get("settings") or {}
         else:
             return
 
-        height = settings.get("aiHeight")
+        # aiHeight lives in info (not settings) in postDeviceDetail responses
+        height = info.get("aiHeight") if "aiHeight" in info else settings.get("aiHeight")
         if height is None:
             return
         self._attr_native_value = float(int(height))

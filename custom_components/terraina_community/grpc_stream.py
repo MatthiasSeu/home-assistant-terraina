@@ -61,19 +61,25 @@ def _query_state_msg(sn: str) -> platform_iot_streams_pb2.In:
     return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
 
 
+def _query_msg(
+    sn: str, cmd: str, params: dict | None = None
+) -> platform_iot_streams_pb2.In:
+    """Build a single gRPC device query message."""
+    msg_id = "ha-" + random_code()
+    svc_id = "ha-" + random_code()
+    msg = DeviceMessageWrapper()
+    msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(svc_id, "get", {cmd: params})
+    return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
+
+
 def _query_map_msgs(sn: str) -> list[platform_iot_streams_pb2.In]:
-    """Return probe messages for map-related gRPC commands (sent once at startup, no params)."""
-    candidates = ["getMulMapData", "getMapConfig", "getMulMapVersion", "getMulBoundary"]
-    msgs = []
-    for cmd in candidates:
-        msg_id = "ha-" + random_code()
-        svc_id = "ha-" + random_code()
-        msg = DeviceMessageWrapper()
-        msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
-            svc_id, "get", {cmd: None}
-        )
-        msgs.append(platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64()))
-    return msgs
+    """Return startup map queries.
+
+    Only getMulMapVersion is sent — the others (getMulMapData, getMulBoundary,
+    getMapConfig) silently time out without params and are probed later via
+    the _query_mul_map_data_msgs follow-up when the mapVersion is known.
+    """
+    return [_query_msg(sn, "getMulMapVersion")]
 
 
 def _query_mul_map_data_msgs(
@@ -117,15 +123,6 @@ def _query_mul_map_data_msgs(
         msgs.append(platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64()))
     return msgs
 
-
-def _query_regions_msg(sn: str) -> platform_iot_streams_pb2.In:
-    msg_id = "ha-" + random_code()
-    svc_id = "ha-" + random_code()
-    msg = DeviceMessageWrapper()
-    msg.set_info(VERSION, msg_id, sn, utc_now_str()).set_service(
-        svc_id, "get", {"getRegions": None}
-    )
-    return platform_iot_streams_pb2.In(type="device", sn=sn, payload=msg.to_base64())
 
 
 def _query_schedule_msg(sn: str) -> platform_iot_streams_pb2.In:
@@ -268,7 +265,6 @@ class TerrainaGrpcStream:
             await call.write(_heartbeat_msg(self._sn))
             await call.write(_query_state_msg(self._sn))
             await call.write(_query_schedule_msg(self._sn))
-            await call.write(_query_regions_msg(self._sn))
             for map_msg in _query_map_msgs(self._sn):
                 await call.write(map_msg)
         except Exception:
@@ -317,6 +313,18 @@ class TerrainaGrpcStream:
             if state:
                 _LOGGER.debug("gRPC device state sm=%r: %s", msg.sm, state)
                 self._callback(state)
+
+                # mapCreate = device finished updating its internal map after a mow.
+                # This is the ideal moment to re-probe boundary data, so reset the
+                # flag and re-query getMulMapVersion to kick off the follow-up chain.
+                if "mapCreate" in state:
+                    _LOGGER.debug(
+                        "gRPC mapCreate for %s — re-querying getMulMapVersion "
+                        "to probe boundary data at map-update time",
+                        self._sn,
+                    )
+                    self._map_data_queried = False
+                    followup_msgs.append(_query_msg(self._sn, "getMulMapVersion"))
 
                 # As soon as we know the mapVersion, probe getMulMapData + getMulBoundary
                 if "getMulMapVersion" in state and not self._map_data_queried:
