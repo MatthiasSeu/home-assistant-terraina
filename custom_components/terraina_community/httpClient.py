@@ -95,8 +95,13 @@ class TerrainaHttpClient:
         self, config_entry: ConfigEntry, sn: str, manual_mode_type: int
     ) -> None:
         """Send a setWorkMode command (0=auto, 1=manual)."""
+        _LOGGER.debug(
+            "setWorkMode → %s (workMode=%d) for %s",
+            "auto" if manual_mode_type == 0 else "manual", manual_mode_type, sn,
+        )
         payload_b64 = self._message_builder.build_change_working_mode_payload(sn, manual_mode_type)
         await self._send_message(config_entry, sn, payload_b64)
+        _LOGGER.debug("setWorkMode sent for %s", sn)
 
     async def set_schedule(
         self, config_entry: ConfigEntry, sn: str, schedule_days: list[dict]

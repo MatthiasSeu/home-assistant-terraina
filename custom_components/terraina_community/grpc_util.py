@@ -73,14 +73,19 @@ class MessageBuilder:
     def build_change_working_mode_payload(
         self, serial_number: str, manual_mode_type: int
     ) -> str:
-        """Produce base64 payload for setWorkMode command (0=auto, 1=manual)."""
+        """Produce base64 payload for setWorkMode command.
+
+        0 = auto (schedule), 1 = manual.
+        The device's status bit 13 (working_mode) is controlled by 'workMode'.
+        'manualModeType' is a sub-type that only applies within manual mode.
+        """
         msg_id = self._HA_PREFIX + random_code()
         service_id = self._HA_PREFIX + random_code()
         msg = DeviceMessageWrapper()
         msg.set_info(self._VERSION, msg_id, serial_number, utc_now_str()).set_service(
             service_id,
             "set",
-            {"setWorkMode": {"manualModeType": manual_mode_type}},
+            {"setWorkMode": {"workMode": manual_mode_type}},
         )
         return msg.to_base64()
 
